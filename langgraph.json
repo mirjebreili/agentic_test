@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "trader": "./app/lg_entry.py:make_graph"
+  },
+  "env": "./.env",
+  "python_version": "3.11"
+}

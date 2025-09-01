@@ -12,8 +12,7 @@ async def _get(url: str, params: dict | None = None) -> dict:
         return r.json()
 
 async def candles(instrument: str, granularity: str, count: int = 500) -> pd.DataFrame:
-    base = settings.oanda.base
-    url = f"{base}/v3/instruments/{instrument}/candles"
+    url = f"{settings.oanda.base}/v3/instruments/{instrument}/candles"
     params = {"granularity": granularity, "count": str(count), "price": "M"}
     data = await _get(url, params=params)
     rows = []

@@ -52,7 +52,6 @@ oanda:
   live_base: "https://api-fxtrade.oanda.com"
   account_id: ${OANDA_ACCOUNT_ID}
   api_key: ${OANDA_API_KEY}
-  env: ${OANDA_ENV}
 
 alpha_vantage:
   api_key: ${ALPHA_VANTAGE_KEY}

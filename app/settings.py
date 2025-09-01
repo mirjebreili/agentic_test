@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 import yaml
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -29,9 +29,13 @@ class RiskSettings(BaseModel):
 class OandaSettings(BaseModel):
     practice_base: str
     live_base: str
-    account_id: str
-    api_key: str
-    env: str  # practice | live
+    account_id: str | None = None
+    api_key: str | None = None
+    env: Literal["practice", "live"] = "practice"
+
+    @property
+    def base(self) -> str:
+        return self.practice_base if self.env == "practice" else self.live_base
 
 class SchedulerSettings(BaseModel):
     decisions: list[dict]
@@ -72,25 +76,17 @@ def load_settings() -> Settings:
         raw = _expand_env(f.read())
     data: dict[str, Any] = yaml.safe_load(raw)
 
-    # Resolve OANDA base by env
+    # Resolve OANDA env
     env = data.get("oanda", {}).get("env", os.getenv("OANDA_ENV", "practice")).lower()
-    base = data["oanda"]["practice_base"] if env == "practice" else data["oanda"]["live_base"]
     data["oanda"]["env"] = env
-    data["oanda"]["base"] = base
 
     s = Settings(**data)
-
-    if s.mode.upper() in ["PAPER", "LIVE"]:
-        if not s.oanda.api_key or s.oanda.api_key == "replace_me":
-            raise ValueError("OANDA_API_KEY must be set in .env for PAPER or LIVE mode")
-        if not s.oanda.account_id or s.oanda.account_id == "replace_me":
-            raise ValueError("OANDA_ACCOUNT_ID must be set in .env for PAPER or LIVE mode")
 
     return s
 
 try:
     settings = load_settings()
-except ValueError as e:
-    import sys
-    print(f"Error loading settings: {e}")
-    sys.exit(1)
+except Exception as e:
+    # Use print because logger may depend on settings
+    print(f"[config] Failed to load settings: {type(e).__name__}: {e}", flush=True)
+    raise  # bubble up so we see the stack

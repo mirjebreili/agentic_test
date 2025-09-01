@@ -59,39 +59,31 @@ strategy_agent = create_react_agent(
     llm,
     tools=[get_candles],
     name="strategy_agent",
-    prompt=(
-        "Choose preset from [trend_following, mean_reversion, breakout] based on candles.\\n"
-        "Return JSON: {\\"preset\\": str, \\"rationale\\": str}."
-    ),
+    prompt="""Choose preset from [trend_following, mean_reversion, breakout] based on candles.
+Return JSON: {"preset": str, "rationale": str}.""",
 )
 
 signal_agent = create_react_agent(
     llm,
     tools=[get_candles, propose_order],
     name="signal_agent",
-    prompt=(
-        "Generate a signal JSON: {action: buy|sell|hold, instrument, timeframe, units, entry_type, price|null}.\\n"
-        "If hold, stop. If buy/sell, call propose_order."
-    ),
+    prompt="""Generate a signal JSON: {"action": "buy|sell|hold", "instrument": str, "timeframe": str, "units": int, "entry_type": "market|limit", "price": float|None}.
+If hold, stop. If buy/sell, call propose_order.""",
 )
 
 risk_agent = create_react_agent(
     llm,
     tools=[attach_stops],
     name="risk_agent",
-    prompt=(
-        "Given an order proposal and ATR, attach stop_loss and take_profit using multiples.\\n"
-        "Reply final order JSON."
-    ),
+    prompt="""Given an order proposal and ATR, attach stop_loss and take_profit using multiples.
+Reply final order JSON.""",
 )
 
 exec_agent = create_react_agent(
     llm,
     tools=[execute_order],
     name="exec_agent",
-    prompt=(
-        "Execute the validated order if allowed. Return broker response JSON or skip reason."
-    ),
+    prompt="""Execute the validated order if allowed. Return broker response JSON or skip reason.""",
 )
 
 class TraderState(MessagesState):

@@ -10,8 +10,9 @@ llm:
 
 mode: ${MODE}
 
-data_provider: "oanda"
-broker_provider: "oanda"
+# switch providers for demo
+broker_provider: "paper"
+data_provider: "mock"
 news_provider: null
 macro_provider: "trading_economics"
 
@@ -80,3 +81,23 @@ logging:
 persistence:
   run_dir: runs/
   db_url: null
+
+# simulated broker settings
+paper:
+  initial_cash: 100000
+  base_currency: USD
+  spread_pips: 0.8
+  slippage_pips: 0.2
+  commission_per_million: 0
+  lot_size: 1000
+  ledger_path: runs/paper_ledger.json
+
+# mock data settings (synthetic by default, can use CSVs later)
+mock_data:
+  source: "synthetic"     # "synthetic" | "csv"
+  seed: 42
+  drift: 0.0
+  vol: 0.01
+  csv_files:
+    EUR_USD: "data/EUR_USD_M5.csv"
+    GBP_USD: "data/GBP_USD_M5.csv"

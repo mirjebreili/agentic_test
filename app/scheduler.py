@@ -2,18 +2,33 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from app.settings import settings
-from app.tools import data_oanda
 from app.graph import app as trader_graph
 
 async def run_decision_cycle(instrument: str, timeframe: str):
-    df = await data_oanda.candles(instrument, timeframe, count=400)
+    # pick data provider
+    if settings.data_provider == "mock":
+        from app.tools import data_mock
+        df = data_mock.candles(instrument, timeframe, count=2)
+    else:
+        from app.tools import data_oanda
+        df = await data_oanda.candles(instrument, timeframe, count=2)
+
     if df.empty:
         return
-    # Last bar already filtered by complete=True in provider
+
+    last = df.iloc[-1]
+
+    # advance paper broker per bar
+    if settings.broker_provider == "paper":
+        from app.tools.broker_paper import PaperBroker
+        PaperBroker().on_bar(
+            instrument,
+            float(last.open), float(last.high), float(last.low), float(last.close)
+        )
+
+    # trigger the agent chain on bar close
     await trader_graph.ainvoke({
-        "messages": [
-            {"role": "user", "content": f"CandleCloseEvent {instrument} {timeframe}"}
-        ]
+        "messages":[{"role":"user","content":f"CandleCloseEvent {instrument} {timeframe}"}]
     })
 
 async def bar_close_loops():
@@ -29,7 +44,6 @@ async def price_stream_loop():
         return
     # TODO: implement OANDA pricing stream; on spikes route to risk adjustments only
     while True:
-        print("Price stream loop (stub)")
         await asyncio.sleep(30)
 
 async def macro_loop():
@@ -37,7 +51,6 @@ async def macro_loop():
         return
     # TODO: query Trading Economics; set ALLOW_NEW_ENTRIES=false around events
     while True:
-        print("Macro loop (stub)")
         await asyncio.sleep(300)
 
 async def heartbeat_loop():

@@ -49,10 +49,15 @@ def execute_order(order: dict, open_positions: int = 0, daily_dd: float = 0.0, a
     ok, reason = guardrails_pass(dt.datetime.utcnow(), open_positions, daily_dd, allow_new_entries)
     if not ok:
         return {"status": "skipped", "reason": reason}
+
     if str(settings.mode).upper() == "BACKTEST":
         return {"status": "skipped", "reason": "backtest_mode"}
-    res = asyncio.run(broker_oanda.place_order(order))
-    return res
+
+    if settings.broker_provider == "paper":
+        from app.tools.broker_paper import PaperBroker
+        return PaperBroker().place_order(order)
+    else:
+        return asyncio.run(broker_oanda.place_order(order))
 
 # ---- Agents (light prompts; can be replaced by your custom ones) ----
 strategy_agent = create_react_agent(

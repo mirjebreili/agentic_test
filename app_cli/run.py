@@ -10,9 +10,9 @@ def main():
     if args.mode:
         settings.mode = args.mode
 
-    if settings.mode.upper() in {"PAPER", "LIVE"}:
+    if settings.mode.upper() in {"PAPER", "LIVE"} and settings.broker_provider != "paper":
         if not settings.oanda.api_key or not settings.oanda.account_id:
-            print("Missing OANDA credentials for PAPER/LIVE mode. Set OANDA_API_KEY and OANDA_ACCOUNT_ID.", flush=True)
+            print("Missing OANDA credentials for PAPER/LIVE mode with OANDA broker. Set OANDA_API_KEY and OANDA_ACCOUNT_ID.", flush=True)
             sys.exit(1)
 
     try:

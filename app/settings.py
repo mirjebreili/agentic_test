@@ -56,6 +56,8 @@ class Settings(BaseModel):
     scheduler: SchedulerSettings
     risk: RiskSettings
     oanda: OandaSettings
+    paper: dict | None = None
+    mock_data: dict | None = None
     alpha_vantage: dict | None = None
     finnhub: dict | None = None
     twelve_data: dict | None = None

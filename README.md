@@ -28,3 +28,10 @@ python -m app_cli.run --mode PAPER
 * Decisions run **on bar close** per timeframe. Price stream & macro throttles are placeholders—fill them next.
 * Orders attach server-side SL/TP (if provided) and are skipped in `BACKTEST`.
 * Start with OANDA practice. Only later consider LIVE.
+
+### Demo (no broker, no keys)
+1) In `config/settings.yaml`:
+   - `broker_provider: "paper"`
+   - `data_provider: "mock"`
+2) Run: `python -m app_cli.run --mode PAPER`
+3) Inspect `runs/paper_ledger.json` for orders/positions/PnL.

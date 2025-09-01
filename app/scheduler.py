@@ -25,26 +25,35 @@ async def bar_close_loops():
         await asyncio.sleep(20)  # lightweight polling; rely on complete flag
 
 async def price_stream_loop():
+    if not settings.scheduler.price_stream or not settings.scheduler.price_stream.get("enabled"):
+        return
     # TODO: implement OANDA pricing stream; on spikes route to risk adjustments only
-    await asyncio.sleep(1)
     while True:
-        await asyncio.sleep(5)
+        print("Price stream loop (stub)")
+        await asyncio.sleep(30)
 
 async def macro_loop():
+    if not settings.scheduler.macro_throttle or not settings.scheduler.macro_throttle.get("enabled"):
+        return
     # TODO: query Trading Economics; set ALLOW_NEW_ENTRIES=false around events
-    await asyncio.sleep(1)
     while True:
+        print("Macro loop (stub)")
         await asyncio.sleep(300)
 
 async def heartbeat_loop():
     while True:
+        print(f"Heartbeat alive check at {dt.datetime.utcnow().isoformat()}")
         # TODO: check PnL, daily drawdown, open positions, etc.
         await asyncio.sleep(settings.scheduler.heartbeat_every_seconds)
 
 async def run_scheduler():
-    await asyncio.gather(
+    tasks = [
         bar_close_loops(),
-        price_stream_loop(),
-        macro_loop(),
         heartbeat_loop(),
-    )
+    ]
+    if settings.scheduler.price_stream and settings.scheduler.price_stream.get("enabled"):
+        tasks.append(price_stream_loop())
+    if settings.scheduler.macro_throttle and settings.scheduler.macro_throttle.get("enabled"):
+        tasks.append(macro_loop())
+
+    await asyncio.gather(*tasks)

@@ -1,0 +1,83 @@
+app:
+  name: multiagent-trader
+
+llm:
+  base_url: ${OPENAI_BASE_URL}
+  model: ${OPENAI_MODEL}
+  temperature: 0.2
+  max_tokens: 1024
+  request_timeout_s: 30
+
+mode: ${MODE}
+
+data_provider: "oanda"
+broker_provider: "oanda"
+news_provider: null
+macro_provider: "trading_economics"
+
+instruments: ["EUR_USD", "GBP_USD"]
+timeframes: ["M5", "H1", "D"]
+
+scheduler:
+  decisions:
+    - instrument: "EUR_USD"
+      timeframe: "M5"
+    - instrument: "EUR_USD"
+      timeframe: "H1"
+    - instrument: "GBP_USD"
+      timeframe: "M15"
+  heartbeat_every_seconds: 60
+  price_stream:
+    enabled: true
+    instruments: ["EUR_USD","GBP_USD"]
+    atr_window: 14
+    spike_threshold_atr: 2.5
+  macro_throttle:
+    enabled: true
+    before_minutes: 15
+    after_minutes: 15
+
+risk:
+  max_risk_per_trade: 0.005
+  max_daily_loss: 0.02
+  max_open_positions: 3
+  allowed_sessions: ["07:00-21:00"]
+  kill_switch: true
+  default_units: 1000
+  sl_buffer_atr: 1.5
+  tp_buffer_atr: 2.5
+
+oanda:
+  practice_base: "https://api-fxpractice.oanda.com"
+  live_base: "https://api-fxtrade.oanda.com"
+  account_id: ${OANDA_ACCOUNT_ID}
+  api_key: ${OANDA_API_KEY}
+  env: ${OANDA_ENV}
+
+alpha_vantage:
+  api_key: ${ALPHA_VANTAGE_KEY}
+  intraday_interval: "5min"
+  outputsize: "compact"
+
+finnhub:
+  api_key: ${FINNHUB_API_KEY}
+
+twelve_data:
+  api_key: ${TWELVEDATA_KEY}
+
+trading_economics:
+  api_key: ${TE_KEY}
+
+backtest:
+  start: "2023-01-01"
+  end:   "2025-08-01"
+  initial_cash: 100000
+
+logging:
+  level: INFO
+  json: true
+  file: logs/run.log
+
+persistence:
+  run_dir: runs/
+  db_url: null

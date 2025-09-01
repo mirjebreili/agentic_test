@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multiagent-trader"
+version = "0.1.0"
+description = "Local multi-agent FX trader using LangGraph + vLLM + OANDA"
+requires-python = ">=3.10"
+dependencies = [
+  "langgraph>=0.2.0",
+  "langchain>=0.3.0",
+  "langchain-openai>=0.1.14",
+  "pydantic>=2.6",
+  "pandas>=2.2",
+  "pandas-ta>=0.3.14b0",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+  "PyYAML>=6.0",
+  "oandapyV20>=0.7.2",
+  "backtrader>=1.9.78.123",
+  "uvloop>=0.19; platform_system != 'Windows'",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "app_cli*", "tests*"]

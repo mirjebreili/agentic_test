@@ -1,11 +1,13 @@
 from __future__ import annotations
 import asyncio
+import json
 from typing import TypedDict, List
 import pandas as pd
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
 from langchain.tools import tool
+from langchain_core.messages import AIMessage
 
 from app.llm import make_llm
 from app.settings import settings
@@ -17,31 +19,27 @@ class TraderState(TypedDict):
     instrument: str
     timeframe: str
     candles: pd.DataFrame
-    # ... other state fields can be added here
+    strategy_preset: str
 
 # --- Nodes ---
-def handle_event(state: TraderState) -> TraderState:
+async def handle_event(state: TraderState) -> TraderState:
     """
     Entry node: Parses the input event, fetches data, and steps the paper broker.
     """
     print("--- handling event ---")
     last_message = state["messages"][-1]
 
-    # Parse instrument and timeframe from the event message
     parts = last_message['content'].split(" ")
     instrument = parts[1]
     timeframe = parts[2]
 
-    # Fetch candle data
     if settings.data_provider == "mock":
         from app.tools import data_mock
         df = data_mock.candles(instrument, timeframe, count=200)
     else:
         from app.tools import data_oanda
-        # Running async code in a sync function
-        df = asyncio.run(data_oanda.candles(instrument, timeframe, count=200))
+        df = await data_oanda.candles(instrument, timeframe, count=200)
 
-    # Step paper broker if enabled
     if settings.broker_provider == "paper" and not df.empty:
         from app.tools.broker_paper import PaperBroker
         last_bar = df.iloc[-1]
@@ -56,7 +54,35 @@ def handle_event(state: TraderState) -> TraderState:
         **state,
         "instrument": instrument,
         "timeframe": timeframe,
-        "candles": df.to_dict(orient="records"), # Pass serializable data
+        "candles": df.to_dict(orient="records"),
+    }
+
+async def strategy_node(state: TraderState) -> TraderState:
+    """
+    Calls the LLM to decide on a strategy preset based on candle data.
+    """
+    print("--- selecting strategy ---")
+    llm = make_llm()
+    prompt = f"""You are the Strategy Selector. Based on the provided candle data, choose a preset from [trend_following, mean_reversion, breakout].
+The candle data is:
+{state['candles']}
+
+Return JSON: {{"preset": str, "rationale": str}}."""
+
+    response = await llm.ainvoke(prompt)
+
+    try:
+        # The response content might be a stringified JSON.
+        response_json = json.loads(response.content)
+        preset = response_json.get("preset")
+    except (json.JSONDecodeError, AttributeError):
+        preset = "default" # Fallback strategy
+
+    print(f"--- strategy selected: {preset} ---")
+
+    return {
+        **state,
+        "strategy_preset": preset,
     }
 
 # --- Graph Builder ---
@@ -68,15 +94,7 @@ def build_trader_graph(config: dict):
     @tool
     def propose_order(instrument: str, side: str, units: int, entry_type: str = "market", price: float | None = None):
         """Create a normalized order proposal."""
-        return {
-            "instrument": instrument,
-            "side": side,
-            "units": int(units),
-            "entry_type": entry_type,
-            "price": price,
-            "stop_loss": None,
-            "take_profit": None,
-        }
+        return {"instrument": instrument, "side": side, "units": int(units), "entry_type": entry_type, "price": price, "stop_loss": None, "take_profit": None}
 
     @tool
     def attach_stops(order: dict, atr: float, sl_mult: float = None, tp_mult: float = None):
@@ -96,10 +114,8 @@ def build_trader_graph(config: dict):
         ok, reason = guardrails_pass(dt.datetime.now(dt.UTC), open_positions, daily_dd, allow_new_entries)
         if not ok:
             return {"status": "skipped", "reason": reason}
-
         if str(settings.mode).upper() == "BACKTEST":
             return {"status": "skipped", "reason": "backtest_mode"}
-
         if settings.broker_provider == "paper":
             from app.tools.broker_paper import PaperBroker
             return PaperBroker().place_order(order)
@@ -108,21 +124,12 @@ def build_trader_graph(config: dict):
             return asyncio.run(broker_oanda.place_order(order))
 
     # --- Agents ---
-    strategy_agent = create_react_agent(
-        llm,
-        tools=[], # No tools needed, gets data from state
-        name="strategy_agent",
-        prompt="""You are the Strategy Selector. Based on the provided candle data, choose a preset from [trend_following, mean_reversion, breakout].
-The candle data is available in the input. Do not try to fetch it.
-Return JSON: {"preset": str, "rationale": str}.""",
-    )
-
     signal_agent = create_react_agent(
         llm,
-        tools=[propose_order], # Only needs to propose an order
+        tools=[propose_order],
         name="signal_agent",
-        prompt="""Generate a trading signal based on the latest candle data and the chosen strategy preset.
-The candle data is in the input. Do not try to fetch it.
+        prompt="""Generate a trading signal based on the latest candle data and the chosen strategy preset, which are provided in the input.
+Do not try to fetch data.
 Reply strict JSON: {"action": "buy|sell|hold", "instrument": str, "timeframe": str, "units": int, "entry_type": "market|limit", "price": float|None}.
 If hold, stop. If buy/sell, call propose_order.""",
     )
@@ -131,8 +138,7 @@ If hold, stop. If buy/sell, call propose_order.""",
         llm,
         tools=[attach_stops],
         name="risk_agent",
-        prompt="""Given an order proposal and ATR, attach stop_loss and take_profit using multiples.
-Reply final order JSON.""",
+        prompt="""Given an order proposal and ATR, attach stop_loss and take_profit using multiples. Reply final order JSON.""",
     )
 
     exec_agent = create_react_agent(
@@ -146,7 +152,7 @@ Reply final order JSON.""",
     graph = StateGraph(TraderState)
 
     graph.add_node("event_handler", handle_event)
-    graph.add_node("strategy", strategy_agent)
+    graph.add_node("strategy", strategy_node)
     graph.add_node("signal", signal_agent)
     graph.add_node("risk", risk_agent)
     graph.add_node("exec", exec_agent)

@@ -18,6 +18,3 @@ dist/
 # Logs
 logs/
 runs/
-
-# Laggraph-CLI
-.langgraph_api

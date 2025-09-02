@@ -26,7 +26,8 @@ def test_build_trader_graph(graph):
     assert ("risk", "exec") in edges
     assert ("exec", END) in edges
 
-def test_handle_event_node(monkeypatch):
+@pytest.mark.asyncio
+async def test_handle_event_node(monkeypatch):
     """Test the handle_event node logic."""
     # Mock the data provider functions to avoid actual data fetching
     mock_candles = MagicMock(return_value=MagicMock())
@@ -40,9 +41,10 @@ def test_handle_event_node(monkeypatch):
         "instrument": "",
         "timeframe": "",
         "candles": None,
+        "strategy_preset": ""
     }
 
-    new_state = handle_event(initial_state)
+    new_state = await handle_event(initial_state)
 
     mock_candles.assert_called_once_with("EUR_USD", "M5", count=200)
     assert new_state["instrument"] == "EUR_USD"

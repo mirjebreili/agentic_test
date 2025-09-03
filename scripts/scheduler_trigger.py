@@ -6,6 +6,7 @@ import sys
 import json
 from pathlib import Path
 from langgraph_sdk import get_sync_client
+from langgraph_sdk.client import LangGraphClient
 
 # --- Configuration ---
 POLL_INTERVAL_SECONDS = 60
@@ -13,10 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 THREAD_MAP_FILE = ROOT / "runs" / "threads.json"
 
 class ThreadManager:
-    """Handles creation, storage, and retrieval of thread IDs."""
-    def __init__(self, file_path: Path):
+    """Handles creation, storage, and retrieval of thread IDs with verification."""
+    def __init__(self, file_path: Path, client: LangGraphClient):
         self.file_path = file_path
+        self.client = client
         self._thread_map = self._load()
+        self._verify_all_threads()
 
     def _load(self) -> dict:
         if self.file_path.exists():
@@ -25,25 +28,61 @@ class ThreadManager:
 
     def _save(self):
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
-        self.file_path.write_text(json.dumps(self._thread_map, indent=2))
+        # Use atomic write pattern
+        temp_path = self.file_path.with_suffix(".tmp")
+        temp_path.write_text(json.dumps(self._thread_map, indent=2))
+        os.replace(temp_path, self.file_path)
 
-    def get_thread_id(self, client, instrument: str, timeframe: str) -> str:
-        """Get or create a thread_id for the given instrument/timeframe pair."""
+    def _verify_all_threads(self):
+        """On startup, check if threads are stale. If so, wipe the map."""
+        if not self._thread_map:
+            return
+
+        # Check the first thread as a canary for a new server session
+        first_thread_id = next(iter(self._thread_map.values()), None)
+        if not first_thread_id:
+            return
+
+        try:
+            self.client.threads.get(first_thread_id)
+        except Exception:
+            print("Stale thread detected, assuming new server session. Wiping thread map.")
+            self._thread_map = {}
+            self._save()
+
+    def get_thread_id(self, instrument: str, timeframe: str) -> str:
+        """Get or create a thread_id, verifying its existence on the server."""
         key = f"{instrument}_{timeframe}"
-        if key in self._thread_map:
-            print(f"Reusing thread for {key}: {self._thread_map[key]}")
-            return self._thread_map[key]
+        thread_id = self._thread_map.get(key)
 
+        if thread_id:
+            try:
+                self.client.threads.get(thread_id)
+                print(f"Reusing thread for {key}: {thread_id} (verified)")
+                return thread_id
+            except Exception:
+                print(f"Stale thread ID for {key}: {thread_id}. Recreating...")
+
+        return self._create_new_thread(key, instrument, timeframe)
+
+    def _create_new_thread(self, key: str, instrument: str, timeframe: str) -> str:
         print(f"Creating new thread for {key}...")
-        thread = client.threads.create(metadata={"instrument": instrument, "timeframe": timeframe})
+        thread = self.client.threads.create(metadata={"instrument": instrument, "timeframe": timeframe})
         thread_id = thread["thread_id"]
         self._thread_map[key] = thread_id
         self._save()
         print(f"Created thread for {key}: {thread_id}")
         return thread_id
 
+    def force_recreate(self, instrument: str, timeframe: str) -> str:
+        """Explicitly recreate a thread, used for retries."""
+        key = f"{instrument}_{timeframe}"
+        return self._create_new_thread(key, instrument, timeframe)
+
+
 def load_schedule_config() -> list[dict]:
     """Load the scheduler decisions from settings.yaml."""
+    # ... (implementation is the same)
     try:
         with open(ROOT / "config" / "settings.yaml", "r") as f:
             config = yaml.safe_load(f)
@@ -64,20 +103,17 @@ def run_scheduler():
         assistants = client.assistants.search(graph_id=lg_graph_id)
         if not assistants:
             raise ValueError(f"No assistant found for graph_id '{lg_graph_id}'")
-        assistant = assistants[0]
-        assistant_id = assistant["assistant_id"]
-        print(f"Connection successful. Using assistant {assistant_id} for graph '{lg_graph_id}'.")
+        assistant_id = assistants[0]["assistant_id"]
+        print(f"Connection successful. Using assistant {assistant_id}.")
     except Exception as e:
         print(f"Error connecting to server or finding assistant: {e}", file=sys.stderr)
         sys.exit(1)
 
     schedule_configs = load_schedule_config()
     if not schedule_configs:
-        print("No trading decisions found in scheduler config. Exiting.")
         return
 
-    print(f"Found {len(schedule_configs)} decision(s) to schedule.")
-    thread_manager = ThreadManager(THREAD_MAP_FILE)
+    thread_manager = ThreadManager(THREAD_MAP_FILE, client)
 
     try:
         while True:
@@ -86,15 +122,25 @@ def run_scheduler():
                 instrument = config["instrument"]
                 timeframe = config["timeframe"]
 
-                try:
-                    thread_id = thread_manager.get_thread_id(client, instrument, timeframe)
-                    run_input = {"messages": [{"role": "user", "content": f"CandleCloseEvent {instrument} {timeframe}"}]}
+                for attempt in range(2): # Allow one retry
+                    try:
+                        thread_id = thread_manager.get_thread_id(client, instrument, timeframe)
+                        run_input = {"messages": [{"role": "user", "content": f"CandleCloseEvent {instrument} {timeframe}"}]}
 
-                    print(f"Triggering run for {instrument}/{timeframe} on thread {thread_id}...")
-                    run = client.runs.create(assistant_id=assistant_id, thread_id=thread_id, input=run_input)
-                    print(f"Successfully triggered run {run['run_id']}.")
-                except Exception as e:
-                    print(f"Error triggering run for {instrument}/{timeframe}: {e}", file=sys.stderr)
+                        print(f"Triggering run for {instrument}/{timeframe} on thread {thread_id}...")
+                        run = client.runs.create(assistant_id=assistant_id, thread_id=thread_id, input=run_input)
+                        print(f"Successfully triggered run {run['run_id']}.")
+                        break # Success, exit retry loop
+                    except Exception as e:
+                        # Check if it's a 404 on the thread, indicating a stale thread
+                        if "404" in str(e) and "thread" in str(e).lower():
+                            print(f"Stale thread detected on run creation for {instrument}/{timeframe}. Retrying once.")
+                            thread_manager.force_recreate(instrument, timeframe)
+                            if attempt == 0:
+                                continue # Retry the loop
+
+                        print(f"Error triggering run for {instrument}/{timeframe}: {e}", file=sys.stderr)
+                        break # Failure, exit retry loop
 
             print(f"--- Cycle complete. Waiting for {POLL_INTERVAL_SECONDS} seconds. ---")
             time.sleep(POLL_INTERVAL_SECONDS)

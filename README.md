@@ -80,3 +80,6 @@ For future platform deployments, you can use the `scripts/create_crons_platform_
     ```bash
     python scripts/doctor.py
     ```
+
+### Stale Threads after Server Restart
+The `langgraph dev` server stores all data (including threads) in memory. If you restart the server, all existing threads become invalid. The `scheduler_trigger.py` script is designed to handle this automatically by verifying threads before use and recreating them if they are stale. You should not need to do anything manually, but be aware that you will see messages about threads being recreated after a server restart.

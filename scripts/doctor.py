@@ -52,46 +52,48 @@ def run_diagnostics():
             try:
                 lg_client.threads.get(thread_id)
             except Exception:
-                print(f"   ❌ Stale thread ID found for {key}: {thread_id}")
                 stale_threads += 1
         if stale_threads > 0:
-            print("      (Hint: The scheduler will auto-recreate these, or you can delete runs/threads.json)")
+            print(f"   ⚠️ Found {stale_threads} stale thread(s). They will be auto-recreated.")
         else:
             print(f"   ✅ All {len(thread_map)} threads in mapping are valid.")
-    elif not THREAD_MAP_FILE.exists():
-        print("   ℹ️ No thread mapping file found (runs/threads.json). This is normal on first run.")
 
-    # 4. Check for Cron endpoint availability
-    print("4. Checking for Cron Job API availability ...")
-    if lg_client:
-        try:
-            with httpx.Client() as client:
-                response = client.get(f"{lg_url}/runs/crons/search")
-                if response.status_code == 404:
-                     print("   ✅ Cron endpoints not available on local dev server (as expected).")
-                else:
-                    response.raise_for_status()
-                    print("   ✅ Cron endpoints are available (Platform/Plus server detected).")
-        except httpx.HTTPStatusError as e:
-            print(f"   ⚠️ WARNING: Unexpected status when checking cron endpoints: {e}")
-
-    # 5. Check LLM connectivity
+    # 4. Check LLM connectivity
     from app.settings import settings
-    llm_url = settings.llm.base_url
-    print(f"5. Checking LLM at {llm_url} ...")
-    if llm_url and llm_url.startswith("http"):
+    provider = settings.llm.provider.lower()
+    print(f"4. Checking LLM Provider '{provider}' ...")
+
+    if provider == "vllm":
+        cfg = settings.llm.vllm
+        print(f"   - Checking VLLM at {cfg.base_url} for model {cfg.model} ...")
         try:
             with httpx.Client() as client:
-                response = client.get(f"{llm_url.replace('/v1', '')}/v1/models")
+                response = client.get(f"{cfg.base_url.replace('/v1', '')}/v1/models")
                 response.raise_for_status()
-            print("   ✅ LLM endpoint is reachable.")
+            print("     ✅ VLLM endpoint is reachable.")
         except (httpx.ConnectError, httpx.HTTPStatusError) as e:
-            print(f"   ⚠️ WARNING: Could not connect to LLM: {e}")
-    else:
-        print("   ⚠️ WARNING: LLM base URL is not a valid http endpoint.")
+            print(f"     ❌ FAILED: Could not connect to VLLM: {e}")
+            failures += 1
+    elif provider == "ollama":
+        cfg = settings.llm.ollama
+        print(f"   - Checking Ollama at {cfg.base_url} for model {cfg.model} ...")
+        try:
+            with httpx.Client() as client:
+                response = client.get(f"{cfg.base_url}/api/tags")
+                response.raise_for_status()
+                models = response.json().get("models", [])
+                if any(m['name'] == cfg.model for m in models):
+                    print(f"     ✅ Ollama is reachable and model '{cfg.model}' is available.")
+                else:
+                    print(f"     ❌ FAILED: Ollama is reachable, but model '{cfg.model}' is not found.")
+                    print(f"        (Hint: Run `ollama pull {cfg.model}`)")
+                    failures += 1
+        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+            print(f"     ❌ FAILED: Could not connect to Ollama: {e}")
+            failures += 1
 
-    # 6. Print settings summary
-    print("6. Checking active configuration ...")
+    # 5. Print settings summary
+    print("5. Checking active configuration ...")
     print(f"   - Mode: {settings.mode}")
     print(f"   - Broker Provider: {settings.broker_provider}")
     print(f"   - Data Provider: {settings.data_provider}")

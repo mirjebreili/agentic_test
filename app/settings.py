@@ -9,13 +9,27 @@ from dotenv import load_dotenv
 load_dotenv()
 ROOT = Path(__file__).resolve().parents[1]
 
-class LLMSettings(BaseModel):
+# --- LLM Settings ---
+class VLLMSettings(BaseModel):
+    base_url: str
+    model: str
+    api_key: str | None = None
+    temperature: float = 0.2
+    max_tokens: int = 1024
+
+class OllamaSettings(BaseModel):
     base_url: str
     model: str
     temperature: float = 0.2
-    max_tokens: int = 1024
-    request_timeout_s: int = 30
+    mirostat: int = 0
+    num_predict: int = 1024
 
+class LLMSettings(BaseModel):
+    provider: str
+    vllm: VLLMSettings
+    ollama: OllamaSettings
+
+# --- Other Settings ---
 class RiskSettings(BaseModel):
     max_risk_per_trade: float
     max_daily_loss: float

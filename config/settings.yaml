@@ -2,11 +2,19 @@ app:
   name: multiagent-trader
 
 llm:
-  base_url: ${OPENAI_BASE_URL}
-  model: ${OPENAI_MODEL}
-  temperature: 0.2
-  max_tokens: 1024
-  request_timeout_s: 30
+  provider: ${LLM_PROVIDER}
+  vllm:
+    base_url: ${OPENAI_BASE_URL}
+    model: ${OPENAI_MODEL}
+    api_key: ${OPENAI_API_KEY}
+    temperature: 0.2
+    max_tokens: 1024
+  ollama:
+    base_url: ${OLLAMA_BASE_URL}
+    model: ${OLLAMA_MODEL}
+    temperature: 0.2
+    mirostat: 0
+    num_predict: 1024
 
 mode: ${MODE}
 

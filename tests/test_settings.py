@@ -3,6 +3,7 @@ from app.settings import load_settings
 
 @pytest.fixture(autouse=True)
 def set_required_env_vars(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "vllm")
     monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
     monkeypatch.setenv("OPENAI_MODEL", "test-model")
     monkeypatch.setenv("OANDA_API_KEY", "test-key")
@@ -15,7 +16,8 @@ def test_settings_load_practice(monkeypatch):
     settings = load_settings()
     assert settings.oanda.env == "practice"
     assert settings.oanda.base == "https://api-fxpractice.oanda.com"
-    assert settings.llm.base_url == "http://localhost:8000/v1"
+    assert settings.llm.provider == "vllm"
+    assert settings.llm.vllm.base_url == "http://localhost:8000/v1"
 
 def test_settings_load_live(monkeypatch):
     """Verify settings load correctly for live environment."""

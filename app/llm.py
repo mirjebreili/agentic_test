@@ -1,31 +1,33 @@
-import os
-import sys
-import httpx
-from unittest.mock import MagicMock
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from app.settings import settings
 
+def make_llm() -> BaseChatModel:
+    """
+    Factory function to create an LLM client based on the provider specified in the settings.
+    """
+    provider = settings.llm.provider.lower()
 
-def make_llm() -> ChatOpenAI:
-    # In a test environment, return a mock object to avoid actual LLM calls.
-    if "PYTEST_CURRENT_TEST" in os.environ:
-        return MagicMock(spec=ChatOpenAI)
+    print(f"--- Creating LLM client for provider: {provider} ---")
 
-    try:
-        llm = ChatOpenAI(
-            base_url=settings.llm.base_url,
-            api_key="not-used",   # vLLM typically ignores but client expects a key
-            model=settings.llm.model,
-            temperature=settings.llm.temperature,
-            timeout=settings.llm.request_timeout_s,
-            max_tokens=settings.llm.max_tokens,
+    if provider == "vllm":
+        from langchain_openai import ChatOpenAI
+        cfg = settings.llm.vllm
+        return ChatOpenAI(
+            base_url=cfg.base_url,
+            api_key=cfg.api_key or "not-used",
+            model=cfg.model,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
         )
-        # A simple health check is too slow, rely on user to have it running.
-        # llm.invoke("hello")
-        return llm
-    except (httpx.ConnectError, Exception) as e:
-        # Raise a catchable exception instead of exiting directly
-        raise ConnectionError(
-            f"Error connecting to LLM at {settings.llm.base_url}: {e}. "
-            "Please ensure your vLLM server is running and accessible."
+    elif provider == "ollama":
+        from langchain_community.chat_models import ChatOllama
+        cfg = settings.llm.ollama
+        return ChatOllama(
+            base_url=cfg.base_url,
+            model=cfg.model,
+            temperature=cfg.temperature,
+            mirostat=cfg.mirostat,
+            num_predict=cfg.num_predict,
         )
+    else:
+        raise ValueError(f"Unsupported LLM provider: {settings.llm.provider}")

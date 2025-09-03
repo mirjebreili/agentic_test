@@ -21,16 +21,35 @@ pip install -e .
 pip install -U "langgraph-cli[inmem]" langgraph-sdk
 ```
 
-## 3. Configuration (for Demo Mode)
+## 3. Choose your LLM Provider
 
-The project is configured to run in demo mode by default. You only need to configure your local LLM endpoint.
+This project supports both OpenAI-compatible endpoints (like VLLM) and Ollama.
 
-1.  **Create `.env` file:**
-    Copy the example environment file: `cp .env.example .env`
-2.  **Edit `.env`:**
-    Open the `.env` file and ensure `OPENAI_BASE_URL` and `OPENAI_MODEL` point to your running local LLM server.
-3.  **Confirm `settings.yaml`:**
-    No changes are needed for demo mode. `config/settings.yaml` should be pre-configured to use `broker_provider: paper` and `data_provider: mock`.
+### A) VLLM (OpenAI-compatible)
+
+1.  **Requirements**: A running vLLM server or other OpenAI-compatible API endpoint.
+2.  **Configuration**: In your `.env` file, set:
+    ```dotenv
+    LLM_PROVIDER=VLLM
+    OPENAI_BASE_URL=http://localhost:8000/v1
+    OPENAI_MODEL=Your-Model-Name
+    ```
+
+### B) Ollama (Native API)
+
+1.  **Requirements**: Install [Ollama](https://ollama.com/) and ensure the daemon is running.
+2.  **Pull a model**: You need a model that supports tool calling. We recommend:
+    ```bash
+    ollama pull qwen2.5:7b-instruct
+    # or
+    ollama pull llama3.1:8b-instruct
+    ```
+3.  **Configuration**: In your `.env` file, set:
+    ```dotenv
+    LLM_PROVIDER=OLLAMA
+    OLLAMA_BASE_URL=http://localhost:11434
+    OLLAMA_MODEL=qwen2.5:7b-instruct
+    ```
 
 ## 4. Running the Application (Local Development)
 

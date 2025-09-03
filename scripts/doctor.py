@@ -11,11 +11,7 @@ def run_diagnostics():
     failures = 0
 
     # 1. Check LangGraph Server connectivity
-    lg_url = os.environ.get("LG_URL")
-    if not lg_url:
-        print("Error: LG_URL environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
-
+    lg_url = os.environ.get("LG_URL", "http://127.0.0.1:2024")
     print(f"1. Checking LangGraph Server at {lg_url} ...")
     try:
         with httpx.Client() as client:
@@ -42,14 +38,28 @@ def run_diagnostics():
             print("      (Hint: Make sure the server has loaded the graph from langgraph.json)")
             failures += 1
 
-    # 3. Check LLM connectivity
-    from app.settings import settings # Import here to avoid circular deps
+    # 3. Check for Cron endpoint availability
+    print("3. Checking for Cron Job API availability ...")
+    if failures == 0:
+        try:
+            with httpx.Client() as client:
+                # This is an arbitrary cron endpoint to check for 404
+                response = client.get(f"{lg_url}/runs/crons/search")
+                if response.status_code == 404:
+                     print("   ✅ Cron endpoints not available on local dev server (as expected).")
+                else:
+                    response.raise_for_status()
+                    print("   ✅ Cron endpoints are available (Platform/Plus server detected).")
+        except httpx.HTTPStatusError as e:
+            print(f"   ⚠️ WARNING: Unexpected status when checking cron endpoints: {e}")
+
+    # 4. Check LLM connectivity
+    from app.settings import settings
     llm_url = settings.llm.base_url
-    print(f"3. Checking LLM at {llm_url} ...")
+    print(f"4. Checking LLM at {llm_url} ...")
     if llm_url and llm_url.startswith("http"):
         try:
             with httpx.Client() as client:
-                # vLLM OpenAI-compatible endpoint is at /v1/models
                 response = client.get(f"{llm_url.replace('/v1', '')}/v1/models")
                 response.raise_for_status()
             print("   ✅ LLM endpoint is reachable.")
@@ -58,8 +68,8 @@ def run_diagnostics():
     else:
         print("   ⚠️ WARNING: LLM base URL is not a valid http endpoint.")
 
-    # 4. Print settings summary
-    print("4. Checking active configuration ...")
+    # 5. Print settings summary
+    print("5. Checking active configuration ...")
     print(f"   - Mode: {settings.mode}")
     print(f"   - Broker Provider: {settings.broker_provider}")
     print(f"   - Data Provider: {settings.data_provider}")

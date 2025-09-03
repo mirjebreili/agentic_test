@@ -6,25 +6,27 @@ from langgraph_sdk import get_sync_client
 
 def setup_crons():
     """
-    Connects to the LangGraph server and creates or updates the cron jobs.
+    Connects to a LangGraph Platform/Plus server and creates or updates cron jobs.
+    This script will not work with the local `langgraph dev` server.
     """
-    lg_url = os.environ.get("LG_URL")
+    lg_url = os.environ.get("LG_URL", "http://127.0.0.1:2024")
     lg_graph_id = os.environ.get("LG_GRAPH_ID", "trader")
 
-    if not lg_url:
-        print("Error: LG_URL environment variable is not set.", file=sys.stderr)
-        print("Please set it to the base URL of your LangGraph server (e.g., http://127.0.0.1:2024).", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"--- Cron Setup Script ---")
+    print(f"--- Platform Cron Setup Script ---")
     print(f"Connecting to LangGraph server at: {lg_url}")
 
+    # --- Feature Check ---
     try:
         with httpx.Client() as http_client:
-            response = http_client.get(f"{lg_url}/ok")
+            response = http_client.get(f"{lg_url}/runs/crons/search")
+            if response.status_code == 404:
+                print("\nError: Cron endpoints are not available on this server.", file=sys.stderr)
+                print("This script is intended for LangGraph Platform/Plus deployments.", file=sys.stderr)
+                print("For local development, use `scripts/scheduler_trigger.py` instead.", file=sys.stderr)
+                sys.exit(1)
             response.raise_for_status()
-        print("Successfully connected to the server.")
         client = get_sync_client(url=lg_url)
+        print("Successfully connected and cron endpoints are available.")
     except (httpx.ConnectError, httpx.HTTPStatusError) as e:
         print(f"Error connecting to server: {e}", file=sys.stderr)
         sys.exit(1)

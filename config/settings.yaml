@@ -109,3 +109,13 @@ mock_data:
   csv_files:
     EUR_USD: "data/EUR_USD_M5.csv"
     GBP_USD: "data/GBP_USD_M5.csv"
+
+telemetry:
+  tracing_provider: "local_both"  # none | langsmith | local_both | local_csv | local_jsonl
+  langsmith:
+    project: ${LANGSMITH_PROJECT}
+    endpoint: ${LANGSMITH_ENDPOINT}
+  local:
+    path: "runs/traces/"
+    rotate_days: 30
+  redact_keys: ["api_key", "token", "password", "Authorization"]

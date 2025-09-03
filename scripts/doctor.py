@@ -35,37 +35,20 @@ def run_diagnostics():
     if lg_client:
         try:
             assistants = lg_client.assistants.search(graph_id=lg_graph_id)
-            if assistants:
-                print(f"   ✅ Found default assistant: {assistants[0]['assistant_id']}")
-            else:
+            if not assistants:
                 raise ValueError(f"No assistant found for graph_id '{lg_graph_id}'")
+            print(f"   ✅ Found default assistant: {assistants[0]['assistant_id']}")
         except Exception as e:
             print(f"   ❌ FAILED: Could not find default assistant: {e}")
             failures += 1
 
-    # 3. Check Thread Mapping
-    print("3. Checking thread mapping file...")
-    if lg_client and THREAD_MAP_FILE.exists():
-        thread_map = json.loads(THREAD_MAP_FILE.read_text())
-        stale_threads = 0
-        for key, thread_id in thread_map.items():
-            try:
-                lg_client.threads.get(thread_id)
-            except Exception:
-                stale_threads += 1
-        if stale_threads > 0:
-            print(f"   ⚠️ Found {stale_threads} stale thread(s). They will be auto-recreated.")
-        else:
-            print(f"   ✅ All {len(thread_map)} threads in mapping are valid.")
-
-    # 4. Check LLM connectivity
+    # 3. Check LLM connectivity
     from app.settings import settings
     provider = settings.llm.provider.lower()
-    print(f"4. Checking LLM Provider '{provider}' ...")
-
+    print(f"3. Checking LLM Provider '{provider}' ...")
     if provider == "vllm":
         cfg = settings.llm.vllm
-        print(f"   - Checking VLLM at {cfg.base_url} for model {cfg.model} ...")
+        print(f"   - Checking VLLM at {cfg.base_url} ...")
         try:
             with httpx.Client() as client:
                 response = client.get(f"{cfg.base_url.replace('/v1', '')}/v1/models")
@@ -82,14 +65,35 @@ def run_diagnostics():
                 response = client.get(f"{cfg.base_url}/api/tags")
                 response.raise_for_status()
                 models = response.json().get("models", [])
-                if any(m['name'] == cfg.model for m in models):
-                    print(f"     ✅ Ollama is reachable and model '{cfg.model}' is available.")
-                else:
-                    print(f"     ❌ FAILED: Ollama is reachable, but model '{cfg.model}' is not found.")
+                if not any(m['name'] == cfg.model for m in models):
+                    print(f"     ❌ FAILED: Ollama model '{cfg.model}' not found.")
                     print(f"        (Hint: Run `ollama pull {cfg.model}`)")
                     failures += 1
+                else:
+                    print(f"     ✅ Ollama is reachable and model '{cfg.model}' is available.")
         except (httpx.ConnectError, httpx.HTTPStatusError) as e:
             print(f"     ❌ FAILED: Could not connect to Ollama: {e}")
+            failures += 1
+
+    # 4. Check Tracing Configuration
+    print("4. Checking Tracing/Telemetry configuration ...")
+    telemetry = settings.telemetry
+    print(f"   - Tracing Provider: {telemetry.tracing_provider}")
+    if "langsmith" in telemetry.tracing_provider:
+        if not os.environ.get("LANGSMITH_API_KEY"):
+            print("   ⚠️ WARNING: LangSmith tracing is enabled, but LANGSMITH_API_KEY is not set.")
+        else:
+            print("   ✅ LANGSMITH_API_KEY is set.")
+    if "local" in telemetry.tracing_provider:
+        local_path = ROOT / telemetry.local.path
+        print(f"   - Local tracing path: {local_path}")
+        try:
+            local_path.mkdir(parents=True, exist_ok=True)
+            (local_path / ".writable_test").touch()
+            (local_path / ".writable_test").unlink()
+            print("   ✅ Local tracing path is writable.")
+        except OSError as e:
+            print(f"   ❌ FAILED: Local tracing path is not writable: {e}")
             failures += 1
 
     # 5. Print settings summary

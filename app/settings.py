@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, List
 import yaml
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -28,6 +28,21 @@ class LLMSettings(BaseModel):
     provider: str
     vllm: VLLMSettings
     ollama: OllamaSettings
+
+# --- Telemetry Settings ---
+class LangSmithSettings(BaseModel):
+    project: str | None = None
+    endpoint: str | None = None
+
+class LocalTraceSettings(BaseModel):
+    path: str = "runs/traces/"
+    rotate_days: int = 30
+
+class TelemetrySettings(BaseModel):
+    tracing_provider: str = "local_both"
+    langsmith: LangSmithSettings
+    local: LocalTraceSettings
+    redact_keys: List[str] = ["api_key", "token", "password", "Authorization"]
 
 # --- Other Settings ---
 class RiskSettings(BaseModel):
@@ -60,6 +75,7 @@ class SchedulerSettings(BaseModel):
 class Settings(BaseModel):
     app: dict
     llm: LLMSettings
+    telemetry: TelemetrySettings
     mode: str
     data_provider: str
     broker_provider: str

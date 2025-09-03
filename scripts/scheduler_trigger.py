@@ -120,11 +120,29 @@ def run_scheduler():
 
                 for attempt in range(2): # Allow one retry
                     try:
+                        from app.settings import settings
                         thread_id = thread_manager.ensure_thread_id(instrument, timeframe)
+
                         run_input = {"messages": [{"role": "user", "content": f"CandleCloseEvent {instrument} {timeframe}"}]}
 
+                        metadata = {
+                            "instrument": instrument,
+                            "timeframe": timeframe,
+                            "mode": settings.mode,
+                            "broker_provider": settings.broker_provider,
+                            "data_provider": settings.data_provider,
+                            "llm_provider": settings.llm.provider,
+                            "run_reason": "scheduled",
+                            "app_version": settings.app.get("version", "0.1.0"),
+                        }
+
                         print(f"Triggering run for {instrument}/{timeframe} on thread {thread_id}...")
-                        run = client.runs.create(assistant_id=assistant_id, thread_id=thread_id, input=run_input)
+                        run = client.runs.create(
+                            assistant_id=assistant_id,
+                            thread_id=thread_id,
+                            input=run_input,
+                            metadata=metadata
+                        )
                         print(f"Successfully triggered run {run['run_id']}.")
                         break
                     except Exception as e:

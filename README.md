@@ -102,3 +102,28 @@ For future platform deployments, you can use the `scripts/create_crons_platform_
 
 ### Stale Threads after Server Restart
 The `langgraph dev` server stores all data (including threads) in memory. If you restart the server, all existing threads become invalid. The `scheduler_trigger.py` script is designed to handle this automatically by verifying threads before use and recreating them if they are stale. You should not need to do anything manually, but be aware that you will see messages about threads being recreated after a server restart.
+
+## 7. Tracing & Observability
+
+The application includes a telemetry system that can log traces to local files and/or to LangSmith.
+
+### Local Logs (Default)
+
+By default, detailed traces are written to local files in the `runs/traces/` directory.
+-   **Provider:** `telemetry.tracing_provider` in `config/settings.yaml` is set to `local_both`.
+-   **Files:**
+    -   `YYYY-MM-DD_actions.csv`: A summary of all events, useful for quick analysis.
+    -   `YYYY-MM-DD_actions.jsonl`: Full, sanitized payloads for each event, useful for deep debugging.
+-   **Rotation:** Files are rotated daily.
+
+### LangSmith (Cloud Tracing)
+
+To enable cloud-based tracing with LangSmith:
+1.  Set `telemetry.tracing_provider` to `langsmith` in `config/settings.yaml`.
+2.  Set the following environment variables in your `.env` file:
+    ```dotenv
+    LANGSMITH_TRACING=true
+    LANGSMITH_API_KEY=<your_api_key>
+    LANGSMITH_PROJECT=agentic-trader # or your preferred project name
+    ```
+3.  Start the application as usual. Traces will now appear in your LangSmith project.

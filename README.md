@@ -1,6 +1,8 @@
 # Multiagent Trader (LangGraph Edition)
 
-This project implements a multi-agent FX trading system using the LangGraph framework. It runs as a native LangGraph CLI application, with trading decisions triggered by cron jobs. The default configuration runs in a fully offline demo mode using a paper broker and mock data, so no API keys are required to get started.
+This project implements a multi-agent FX trading system using the LangGraph framework. It is designed to be run with the LangGraph CLI, providing a powerful development and monitoring experience via the LangGraph Studio.
+
+The default configuration runs in a fully offline demo mode using a paper broker and mock data, so no API keys are required to get started.
 
 ## 1. Prerequisites
 
@@ -12,10 +14,6 @@ This project implements a multi-agent FX trading system using the LangGraph fram
 First, clone the repository and set up the Python virtual environment.
 
 ```bash
-# Clone the repository (if you haven't already)
-# git clone <repo_url>
-# cd multiagent-trader
-
 # Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate
@@ -37,31 +35,24 @@ The project is configured to run in a demo mode by default. You just need to set
     ```
 2.  **Edit `.env`:**
     Open the `.env` file and ensure `OPENAI_BASE_URL` and `OPENAI_MODEL` are set correctly for your local LLM server.
-    ```dotenv
-    MODE=PAPER
-    OPENAI_BASE_URL=http://localhost:8000/v1
-    OPENAI_MODEL=Qwen/Qwen2.5-7B-Instruct
-    ```
-3.  **Confirm `settings.yaml`:**
-    No changes are needed for the demo mode. `config/settings.yaml` should be pre-configured to use the paper broker and mock data provider (`broker_provider: paper`, `data_provider: mock`).
 
 ## 4. Running the Application
 
-The application now runs as a LangGraph server. You will need two terminals.
+The application uses a two-process model for development: the LangGraph server runs the graph, and a separate scheduler script triggers the graph on a timer.
 
 ### Terminal 1: Start the LangGraph Server
 
-Start the dev server from the repository root. It will hot-reload on code changes.
+Start the dev server from the repository root. This will serve the graph and the Studio UI.
 
 ```bash
 langgraph dev
 ```
 
-The server will start and print the URL for the LangGraph Studio UI (e.g., `http://127.0.0.1:2024`). Keep this server running.
+The server will start and print the URL for the LangGraph Studio (e.g., `http://127.0.0.1:2024`). Keep this server running.
 
-### Terminal 2: Register Cron Jobs
+### Terminal 2: Start the Scheduler Trigger
 
-Once the server is running, open a second terminal to register the scheduled trading jobs.
+Once the server is running, open a second terminal to start the scheduler script. This script will periodically trigger the trading logic.
 
 ```bash
 # Activate the virtual environment
@@ -71,16 +62,11 @@ source .venv/bin/activate
 export LG_URL="http://127.0.0.1:2024"  # Use the exact URL from the server output
 export LG_GRAPH_ID="trader"           # Must match the graph ID in langgraph.json
 
-# Run the cron script
-python scripts/create_crons.py
+# Run the scheduler trigger
+python scripts/scheduler_trigger.py
 ```
 
-You should see output confirming that the cron jobs were created:
-```
-Upserted cron: m5_eurusd -> */5 * * * * (EUR_USD M5)
-Upserted cron: h1_eurusd -> 0 * * * * (EUR_USD H1)
-Upserted cron: d1_eurusd -> 0 21 * * * (EUR_USD D1)
-```
+The script will now trigger a new run of the `trader` graph every 60 seconds (by default).
 
 ## 5. Monitoring
 
@@ -89,21 +75,12 @@ Upserted cron: d1_eurusd -> 0 21 * * * (EUR_USD D1)
 
 ## 6. Troubleshooting
 
--   **Cron script can't connect**:
-    -   Ensure the `langgraph dev` server is running.
-    -   Verify that the `LG_URL` environment variable exactly matches the URL and port printed by the server.
--   **Graph not found on server start**:
-    -   Make sure you are running `langgraph dev` from the repository root where `langgraph.json` is located.
-    -   Check that `langgraph.json` has the correct path to `app/lg_entry.py`.
-    -   Ensure `app/__init__.py` exists.
--   **LLM calls fail**:
-    -   Verify your local LLM server is running.
-    -   Check that `OPENAI_BASE_URL` in your `.env` file is correct and reachable.
--   **Run the Doctor Script**:
-    For a quick diagnostic check, run the `doctor.py` script:
-    ```bash
-    # Set the same env vars as for the cron script
-    export LG_URL="http://127.0.0.1:2024"
-    export LG_GRAPH_ID="trader"
-    python scripts/doctor.py
-    ```
+Run the diagnostic "doctor" script to check for common issues.
+
+```bash
+# Set the same env vars as for the scheduler trigger
+export LG_URL="http://127.0.0.1:2024"
+export LG_GRAPH_ID="trader"
+python scripts/doctor.py
+```
+This will check for server connectivity, assistant existence, and LLM reachability.

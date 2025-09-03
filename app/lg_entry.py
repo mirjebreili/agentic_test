@@ -5,6 +5,7 @@ from __future__ import annotations
 from langchain_core.runnables import RunnableConfig
 
 def make_graph(config: RunnableConfig | None = None):
+    print("[lg_entry] make_graph called")
     # Prefer importing a builder to avoid side effects on import
     from app.graph import build_trader_graph  # implement if missing
     g = build_trader_graph(config or {})

@@ -1,7 +1,9 @@
 import pytest
+import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from langgraph.graph import END
-from app.graph import build_trader_graph, get_candles
+from langchain_core.messages import ToolMessage
+from app.graph import build_trader_graph, get_candles, check_for_tool_error
 
 @pytest.fixture
 def graph():
@@ -23,10 +25,12 @@ def test_build_trader_graph(graph):
     # We trust that set_entry_point works as intended.
 
     edges = list(graph.edges)
-    assert ("strategy", "signal") in edges
     assert ("signal", "risk") in edges
     assert ("risk", "exec") in edges
-    assert ("exec", END) in edges
+
+    # Check conditional edges
+    assert "strategy" in graph.branches
+    assert "exec" in graph.branches
 
 @pytest.mark.asyncio
 async def test_get_candles_tool_mock_provider(monkeypatch):
@@ -53,3 +57,17 @@ async def test_get_candles_tool_oanda_provider(monkeypatch):
     await get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5"})
 
     mock_data_oanda_candles.assert_called_once_with("EUR_USD", "M5", count=200)
+
+def test_check_for_tool_error_condition():
+    """Test the conditional edge logic for routing errors."""
+    # Test case where there is an error
+    error_state = {
+        "messages": [ToolMessage(content='{"error": "Something went wrong"}', tool_call_id="dummy_id")]
+    }
+    assert check_for_tool_error(error_state) == "error"
+
+    # Test case where there is no error
+    success_state = {
+        "messages": [ToolMessage(content='{"data": "..."}', tool_call_id="dummy_id")]
+    }
+    assert check_for_tool_error(success_state) == "continue"

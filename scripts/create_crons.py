@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sys
+import httpx
 from langgraph_sdk import get_sync_client
 
 def setup_crons():
@@ -19,10 +20,12 @@ def setup_crons():
     print(f"Connecting to LangGraph server at: {lg_url}")
 
     try:
-        client = get_sync_client(url=lg_url)
-        client.get(f"/ok") # Health check
+        with httpx.Client() as http_client:
+            response = http_client.get(f"{lg_url}/ok")
+            response.raise_for_status()
         print("Successfully connected to the server.")
-    except Exception as e:
+        client = get_sync_client(url=lg_url)
+    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
         print(f"Error connecting to server: {e}", file=sys.stderr)
         sys.exit(1)
 

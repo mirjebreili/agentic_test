@@ -11,7 +11,11 @@ def run_diagnostics():
     failures = 0
 
     # 1. Check LangGraph Server connectivity
-    lg_url = os.environ.get("LG_URL", "http://127.0.0.1:2024")
+    lg_url = os.environ.get("LG_URL")
+    if not lg_url:
+        print("Error: LG_URL environment variable is not set.", file=sys.stderr)
+        sys.exit(1)
+
     print(f"1. Checking LangGraph Server at {lg_url} ...")
     try:
         with httpx.Client() as client:

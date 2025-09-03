@@ -1,45 +1,30 @@
 from __future__ import annotations
 import asyncio
-import json
 from typing import TypedDict, List
-import pandas as pd
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.prebuilt import create_react_agent
 from langchain.tools import tool
-from langchain_core.messages import AIMessage
 
 from app.llm import make_llm
 from app.settings import settings
 from app.tools.risk_tool import guardrails_pass
 
-# --- State Definition ---
-class TraderState(TypedDict):
-    messages: List
-    instrument: str
-    timeframe: str
-    candles: pd.DataFrame
-    strategy_preset: str
-
-# --- Nodes ---
-async def handle_event(state: TraderState) -> TraderState:
+# --- Tools ---
+@tool
+async def get_candles(instrument: str, timeframe: str, count: int = 200):
     """
-    Entry node: Parses the input event, fetches data, and steps the paper broker.
+    Asynchronously get recent OHLC candles for an FX instrument and timeframe.
+    This tool will use the data provider specified in the config (mock or oanda).
     """
-    print("--- handling event ---")
-    last_message = state["messages"][-1]
-
-    parts = last_message['content'].split(" ")
-    instrument = parts[1]
-    timeframe = parts[2]
-
     if settings.data_provider == "mock":
         from app.tools import data_mock
-        df = data_mock.candles(instrument, timeframe, count=200)
+        df = data_mock.candles(instrument, timeframe, count=count)
     else:
         from app.tools import data_oanda
-        df = await data_oanda.candles(instrument, timeframe, count=200)
+        df = await data_oanda.candles(instrument, timeframe, count=count)
 
+    # Also step the paper broker if it's active
     if settings.broker_provider == "paper" and not df.empty:
         from app.tools.broker_paper import PaperBroker
         last_bar = df.iloc[-1]
@@ -48,49 +33,14 @@ async def handle_event(state: TraderState) -> TraderState:
             float(last_bar.open), float(last_bar.high), float(last_bar.low), float(last_bar.close)
         )
 
-    print(f"--- fetched {len(df)} candles for {instrument} {timeframe} ---")
-
-    return {
-        **state,
-        "instrument": instrument,
-        "timeframe": timeframe,
-        "candles": df.to_dict(orient="records"),
-    }
-
-async def strategy_node(state: TraderState) -> TraderState:
-    """
-    Calls the LLM to decide on a strategy preset based on candle data.
-    """
-    print("--- selecting strategy ---")
-    llm = make_llm()
-    prompt = f"""You are the Strategy Selector. Based on the provided candle data, choose a preset from [trend_following, mean_reversion, breakout].
-The candle data is:
-{state['candles']}
-
-Return JSON: {{"preset": str, "rationale": str}}."""
-
-    response = await llm.ainvoke(prompt)
-
-    try:
-        # The response content might be a stringified JSON.
-        response_json = json.loads(response.content)
-        preset = response_json.get("preset")
-    except (json.JSONDecodeError, AttributeError):
-        preset = "default" # Fallback strategy
-
-    print(f"--- strategy selected: {preset} ---")
-
-    return {
-        **state,
-        "strategy_preset": preset,
-    }
+    return df.to_dict(orient="records")
 
 # --- Graph Builder ---
 def build_trader_graph(config: dict):
 
     llm = make_llm()
 
-    # --- Tools ---
+    # --- Tools (specific to this graph) ---
     @tool
     def propose_order(instrument: str, side: str, units: int, entry_type: str = "market", price: float | None = None):
         """Create a normalized order proposal."""
@@ -121,44 +71,62 @@ def build_trader_graph(config: dict):
             return PaperBroker().place_order(order)
         else:
             from app.tools import broker_oanda
-            return asyncio.run(broker_oanda.place_order(order))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            return loop.run_until_complete(broker_oanda.place_order(order))
 
     # --- Agents ---
+    strategy_agent = create_react_agent(
+        llm,
+        tools=[get_candles],
+        name="strategy_agent",
+        prompt="""You are the Strategy Selector. Your job is to analyze the market and decide on a trading strategy.
+1. Call the `get_candles` tool to get the latest market data for the instrument and timeframe from the user's request.
+2. Based on the candle data, choose a strategy preset from [trend_following, mean_reversion, breakout].
+3. Return a JSON object with your chosen preset and a brief rationale. Example: {"preset": "trend_following", "rationale": "The 20-period EMA is above the 50-period EMA."}""",
+    )
+
     signal_agent = create_react_agent(
         llm,
         tools=[propose_order],
         name="signal_agent",
-        prompt="""Generate a trading signal based on the latest candle data and the chosen strategy preset, which are provided in the input.
-Do not try to fetch data.
-Reply strict JSON: {"action": "buy|sell|hold", "instrument": str, "timeframe": str, "units": int, "entry_type": "market|limit", "price": float|None}.
-If hold, stop. If buy/sell, call propose_order.""",
+        prompt="""You are the Signal Agent. Based on the strategy preset and candle data from the previous step, generate a trading signal.
+Reply with a strict JSON object representing the signal. Example: {"action": "buy", "instrument": "EUR_USD", "timeframe": "M5", "units": 1000, "entry_type": "market", "price": null}.
+If you decide not to trade, set the action to "hold".
+If you decide to trade, call the `propose_order` tool with the signal details.""",
     )
 
     risk_agent = create_react_agent(
         llm,
         tools=[attach_stops],
         name="risk_agent",
-        prompt="""Given an order proposal and ATR, attach stop_loss and take_profit using multiples. Reply final order JSON.""",
+        prompt="""You are the Risk Agent. Take the proposed order and attach stop_loss and take_profit levels based on the latest Average True Range (ATR) from the candle data.
+Use the `attach_stops` tool to add these values to the order.
+Reply with the final order JSON, including the calculated stop_loss and take_profit.""",
     )
 
     exec_agent = create_react_agent(
         llm,
         tools=[execute_order],
         name="exec_agent",
-        prompt="""Execute the validated order if allowed. Return broker response JSON or skip reason.""",
+        prompt="""You are the Execution Agent. You will receive a final, risk-managed order.
+Your job is to call the `execute_order` tool to place the trade with the broker.
+If the tool returns an error or a "skipped" status, report it. Otherwise, confirm the successful execution.""",
     )
 
     # --- Graph Definition ---
-    graph = StateGraph(TraderState)
+    graph = StateGraph(MessagesState)
 
-    graph.add_node("event_handler", handle_event)
-    graph.add_node("strategy", strategy_node)
+    graph.add_node("strategy", strategy_agent)
     graph.add_node("signal", signal_agent)
     graph.add_node("risk", risk_agent)
     graph.add_node("exec", exec_agent)
 
-    graph.add_edge(START, "event_handler")
-    graph.add_edge("event_handler", "strategy")
+    graph.set_entry_point("strategy")
     graph.add_edge("strategy", "signal")
     graph.add_edge("signal", "risk")
     graph.add_edge("risk", "exec")

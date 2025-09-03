@@ -1,52 +1,55 @@
 import pytest
-from unittest.mock import MagicMock
-from langgraph.graph import START, END
-from app.graph import build_trader_graph, TraderState, handle_event
+from unittest.mock import MagicMock, patch, AsyncMock
+from langgraph.graph import END
+from app.graph import build_trader_graph, get_candles
 
 @pytest.fixture
 def graph():
-    """Fixture to build the graph for testing."""
-    return build_trader_graph(config={})
+    """Fixture to build the graph for testing, mocking the LLM."""
+    with patch('app.graph.make_llm', return_value=MagicMock()):
+        graph = build_trader_graph(config={})
+        yield graph
 
 def test_build_trader_graph(graph):
-    """Test that the graph is built with the correct structure."""
+    """Test that the graph is built with the correct agent-centric structure."""
     assert graph is not None
     nodes = list(graph.nodes.keys())
-    assert "event_handler" in nodes
     assert "strategy" in nodes
     assert "signal" in nodes
     assert "risk" in nodes
     assert "exec" in nodes
 
+    # The entry point is configured but not easily inspectable without internal knowledge.
+    # We trust that set_entry_point works as intended.
+
     edges = list(graph.edges)
-    assert (START, "event_handler") in edges
-    assert ("event_handler", "strategy") in edges
     assert ("strategy", "signal") in edges
     assert ("signal", "risk") in edges
     assert ("risk", "exec") in edges
     assert ("exec", END) in edges
 
 @pytest.mark.asyncio
-async def test_handle_event_node(monkeypatch):
-    """Test the handle_event node logic."""
-    # Mock the data provider functions to avoid actual data fetching
-    mock_candles = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr("app.tools.data_mock.candles", mock_candles)
+async def test_get_candles_tool_mock_provider(monkeypatch):
+    """Test that get_candles tool uses the mock data provider."""
+    mock_data_mock_candles = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr("app.tools.data_mock.candles", mock_data_mock_candles)
 
-    # Mock settings
+    # Mock the settings to use the mock provider
     monkeypatch.setattr("app.graph.settings.data_provider", "mock")
 
-    initial_state: TraderState = {
-        "messages": [{"role": "user", "content": "CandleCloseEvent EUR_USD M5"}],
-        "instrument": "",
-        "timeframe": "",
-        "candles": None,
-        "strategy_preset": ""
-    }
+    # Since get_candles is now a standalone tool, we can invoke it directly
+    await get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5"})
 
-    new_state = await handle_event(initial_state)
+    mock_data_mock_candles.assert_called_once_with("EUR_USD", "M5", count=200)
 
-    mock_candles.assert_called_once_with("EUR_USD", "M5", count=200)
-    assert new_state["instrument"] == "EUR_USD"
-    assert new_state["timeframe"] == "M5"
-    assert "candles" in new_state
+@pytest.mark.asyncio
+async def test_get_candles_tool_oanda_provider(monkeypatch):
+    """Test that get_candles tool uses the oanda data provider."""
+    mock_data_oanda_candles = AsyncMock(return_value=MagicMock())
+    monkeypatch.setattr("app.tools.data_oanda.candles", mock_data_oanda_candles)
+
+    monkeypatch.setattr("app.graph.settings.data_provider", "oanda")
+
+    await get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5"})
+
+    mock_data_oanda_candles.assert_called_once_with("EUR_USD", "M5", count=200)

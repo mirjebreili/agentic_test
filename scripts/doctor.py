@@ -28,8 +28,11 @@ def run_diagnostics():
     if failures == 0: # Skip if server is down
         try:
             lg_client = get_sync_client(url=lg_url)
-            lg_client.assistants.get(lg_graph_id)
-            print("   ✅ Default assistant found.")
+            assistants = lg_client.assistants.search(graph_id=lg_graph_id)
+            if assistants:
+                print(f"   ✅ Found default assistant: {assistants[0]['assistant_id']}")
+            else:
+                raise ValueError(f"No assistant found for graph_id '{lg_graph_id}'")
         except Exception as e:
             print(f"   ❌ FAILED: Could not find default assistant: {e}")
             print("      (Hint: Make sure the server has loaded the graph from langgraph.json)")

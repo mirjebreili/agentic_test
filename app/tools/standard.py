@@ -8,17 +8,33 @@ from langchain.tools import tool
 from app.settings import settings
 from app.tools.risk_tool import guardrails_pass
 
+from app.tools.data_models import FeatureSummary
+
 @tool
 async def get_candles(instrument: str, timeframe: str, count: int = 200) -> str:
-    """Gets recent OHLC candles."""
+    """
+    Gets a summary of recent market data, including the last N closes,
+    technical indicators, and a digest of the features.
+    """
     try:
         if settings.data_provider == "mock":
-            from app.tools import data_mock; df = data_mock.candles(instrument, timeframe, count=count)
+            from app.tools import data_mock; summary = data_mock.candles(instrument, timeframe, count=count)
         else:
-            from app.tools import data_oanda; df = await data_oanda.candles(instrument, timeframe, count=count)
-        if settings.broker_provider == "paper" and not df.empty:
-            from app.tools.broker_paper import PaperBroker; PaperBroker().on_bar(instrument, float(df.iloc[-1].open), float(df.iloc[-1].high), float(df.iloc[-1].low), float(df.iloc[-1].close))
-        return json.dumps(df.to_dict(orient="records"))
+            from app.tools import data_oanda; summary = await data_oanda.candles(instrument, timeframe, count=count)
+
+        # This part for the paper broker is a bit of a hack.
+        # It assumes the last bar's data can be read from the summary.
+        # A better solution would be a proper event bus.
+        if settings.broker_provider == "paper":
+            from app.tools.broker_paper import PaperBroker
+            # We need to read the parquet file to get the last bar for the paper broker
+            # This is not ideal, but it's the only way to get the data without changing the tool's interface
+            import pandas as pd
+            df = pd.read_parquet(summary.cache_path)
+            if not df.empty:
+                 PaperBroker().on_bar(instrument, float(df.iloc[-1].open), float(df.iloc[-1].high), float(df.iloc[-1].low), float(df.iloc[-1].close))
+
+        return summary.model_dump_json()
     except Exception as e:
         return json.dumps({"error": f"Failed to get candles: {e}"})
 

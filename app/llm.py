@@ -1,4 +1,5 @@
 from __future__ import annotations
+import httpx
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from app.settings import settings
@@ -41,10 +42,16 @@ def make_llm() -> BaseChatModel:
         )
 
     cfg = settings.llm
+
+    # Create a custom httpx client with tuned timeouts
+    timeout = httpx.Timeout(cfg.connect_timeout, read=cfg.read_timeout)
+    http_client = httpx.Client(timeout=timeout)
+
     return ChatOpenAI(
         base_url=cfg.base_url,
         api_key=cfg.api_key or "not-needed-for-local",
         model=cfg.model,
         temperature=cfg.temperature,
         max_tokens=cfg.max_tokens,
+        http_client=http_client,
     )

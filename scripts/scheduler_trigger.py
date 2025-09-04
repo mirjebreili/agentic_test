@@ -114,7 +114,13 @@ def run_scheduler():
     try:
         while True:
             print(f"\n--- New scheduler cycle at {time.ctime()} ---")
-            for config in schedule_configs:
+            from app.settings import settings
+
+            for i, config in enumerate(schedule_configs):
+                if i > 0:
+                    print(f"Staggering for {settings.scheduler.stagger_seconds}s...")
+                    time.sleep(settings.scheduler.stagger_seconds)
+
                 instrument = config["instrument"]
                 timeframe = config["timeframe"]
 

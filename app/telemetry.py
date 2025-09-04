@@ -30,8 +30,9 @@ class Tracer:
             "ts_iso", "run_id", "thread_id", "assistant_id", "decision_key",
             "provider", "event_type", "node", "input_digest", "output_digest",
             "status", "error_type", "error_message", "latency_ms",
-            "llm_provider", "llm_model", "tokens_in", "tokens_out", "cost_usd",
-            "mode", "broker_provider", "data_provider", "app_version"
+            "llm_provider", "llm_model", "llm_base_url", "tokens_in", "tokens_out", "cost_usd",
+            "mode", "broker_provider", "data_provider", "app_version",
+            "features_digest", "cache_path"
         ]
 
         self._initialized = True

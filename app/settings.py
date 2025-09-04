@@ -18,6 +18,8 @@ class LLMSettings(BaseModel):
     api_key: str | None = None
     temperature: float = 0.2
     max_tokens: int = 1024
+    connect_timeout: int = 10
+    read_timeout: int = 120
     require_tools: bool = True
     probe_tools: bool = True
 
@@ -71,6 +73,7 @@ class OandaSettings(BaseModel):
 class SchedulerSettings(BaseModel):
     decisions: list[dict]
     heartbeat_every_seconds: int = 60
+    stagger_seconds: int = 2
     price_stream: dict | None = None
     macro_throttle: dict | None = None
 

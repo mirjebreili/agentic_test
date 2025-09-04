@@ -1,6 +1,6 @@
 from typing import Protocol
-import pandas as pd
+from app.tools.data_models import FeatureSummary
 
 class DataProvider(Protocol):
-    async def candles(self, instrument: str, granularity: str, count: int = 500) -> pd.DataFrame:
+    async def candles(self, instrument: str, granularity: str, count: int = 500) -> FeatureSummary:
         ...

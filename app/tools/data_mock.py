@@ -12,11 +12,15 @@ Returns a pandas.DataFrame with columns: time, open, high, low, close
 
 from pathlib import Path
 from typing import Dict
+import hashlib
+import json
 
 import numpy as np
 import pandas as pd
 
 from app.settings import settings
+from app.tools.data_models import FeatureSummary
+from app.tools.ta_tool import compute_indicators
 
 
 def _from_csv(instrument: str, count: int) -> pd.DataFrame:
@@ -74,13 +78,54 @@ def _synthetic(instrument: str, count: int) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def candles(instrument: str, granularity: str, count: int = 500) -> pd.DataFrame:
+def candles(instrument: str, granularity: str, count: int = 500) -> FeatureSummary:
     """
-    Return a DataFrame of recent candles for `instrument`.
+    Return a FeatureSummary of recent candles for `instrument`.
     `granularity` is currently ignored (we emit ~5-minute bars).
     """
     cfg: Dict = getattr(settings, "mock_data", {}) or {}
     source = str(cfg.get("source", "synthetic")).lower()
+
     if source == "csv":
-        return _from_csv(instrument, count)
-    return _synthetic(instrument, count)
+        df = _from_csv(instrument, count)
+    else:
+        df = _synthetic(instrument, count)
+
+    # Add indicators
+    df = compute_indicators(df, preset="trend_following")
+
+    # Create cache path and save data
+    cache_dir = Path(settings.persistence.get("path", "runs/")) / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = pd.Timestamp.utcnow().strftime("%Y%m%d_%H%M%S")
+    cache_path = cache_dir / f"{instrument}_{granularity}_{timestamp}.parquet"
+    df.to_parquet(cache_path)
+
+    # Create summary
+    last_3_closes = df["close"].tail(3).tolist()
+
+    # Get the latest non-NaN indicator values
+    latest_indicators = {}
+    for col in ["ema_fast", "ema_slow", "atr"]:
+        if col in df:
+            last_valid = df[col].last_valid_index()
+            if last_valid is not None:
+                latest_indicators[col] = df.loc[last_valid, col]
+
+    # Create a digest
+    summary_data = {
+        "instrument": instrument,
+        "timeframe": granularity,
+        "last_3_closes": last_3_closes,
+        "indicators": latest_indicators,
+    }
+    digest = hashlib.md5(json.dumps(summary_data, sort_keys=True).encode()).hexdigest()
+
+    return FeatureSummary(
+        instrument=instrument,
+        timeframe=granularity,
+        last_n_closes=last_3_closes,
+        indicators=latest_indicators,
+        cache_path=str(cache_path),
+        features_digest=digest,
+    )

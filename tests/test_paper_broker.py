@@ -18,9 +18,7 @@ def test_paper_flow_smoke():
     assert res["status"] == "accepted"
 
     # advance one synthetic bar to fill the market order
-    df = candles("EUR_USD", "M5", 2)
-    last = df.iloc[-1]
-    brk.on_bar("EUR_USD", float(last.open), float(last.high), float(last.low), float(last.close))
+    brk.on_bar("EUR_USD", o=1.10, h=1.11, l=1.09, c=1.10)
 
     snap = brk.snapshot()
     assert "positions" in snap and isinstance(snap["positions"], dict)

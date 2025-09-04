@@ -27,18 +27,18 @@ cp .env.example .env
 ```
 The `.env` file is used to configure the application's connection to the LLM backend and other services. Here are the key variables:
 
-- `OPENAI_BASE_URL`: The full URL to the OpenAI-compatible endpoint, including the `/v1` path.
+- `OPENAI_BASE_URL`: The root URL of the OpenAI-compatible endpoint (e.g., `http://localhost:11434`). The application will append `/v1`.
 - `OPENAI_MODEL`: The name of the model to use for generation.
 - `LLM_PROVIDER` (Optional): A label for the LLM provider (e.g., `OLLAMA`, `VLLM`). If not set, it will be inferred from the `OPENAI_BASE_URL`.
 - `MODE`: The application's operating mode. The default is `paper` for a simulated trading environment with mock data.
 - `OANDA_API_KEY`, `OANDA_ACCOUNT_ID`: Your OANDA API credentials (only needed for live or practice modes).
 
 ### Choose your LLM backend (exact, copy-paste)
-The application uses a single OpenAI-compatible client. You must provide the full base URL, including the `/v1` path.
+The application uses a single OpenAI-compatible client. You should provide the root URL of your LLM server, and the application will automatically append the `/v1` path.
 
 **vLLM Example**
 ```dotenv
-OPENAI_BASE_URL=http://localhost:8000/v1
+OPENAI_BASE_URL=http://localhost:8000
 OPENAI_MODEL=Your-VLLM-Model-Name
 # OPENAI_API_KEY can be anything non-empty if your server requires it
 ```
@@ -47,7 +47,7 @@ OPENAI_MODEL=Your-VLLM-Model-Name
 ```dotenv
 # First, start the Ollama daemon separately and pull a tool-capable model:
 #   ollama pull llama3.1:8b-instruct
-OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+OPENAI_BASE_URL=http://127.0.0.1:11434
 OPENAI_MODEL=llama3.1:8b-instruct
 # OPENAI_API_KEY can be any non-empty value for Ollama
 OPENAI_API_KEY=ollama
@@ -74,6 +74,7 @@ python scripts/scheduler_trigger.py
 ```
 - **What it does**: This script looks up the “trader” assistant, verifies or creates one thread per decision (e.g., `EUR_USD_M5`), and triggers a run for each on a configurable interval. The triggers are staggered to avoid overwhelming local LLM servers.
 - **Where to look**: It prints run IDs to the console. Detailed per-node telemetry goes to `runs/traces/`.
+- **Note**: You must have the scheduler running to generate logs and see recent decisions in the doctor script.
 
 ## 3. Doctor: How to Use It to Debug
 The `doctor.py` script runs a series of checks to diagnose common configuration and connectivity issues.

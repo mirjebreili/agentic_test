@@ -19,7 +19,11 @@ def probe_tool_calling_capability() -> bool:
         SUPPORTS_TOOL_CALLING = True
         return SUPPORTS_TOOL_CALLING
 
-    print(f"--- Probing LLM at {settings.llm.base_url} for tool-calling capability... ---")
+    base_url = settings.llm.base_url.removesuffix("/")
+    if not base_url.endswith("/v1"):
+        base_url = f"{base_url}/v1"
+
+    print(f"--- Probing LLM at {base_url} for tool-calling capability... ---")
     # This is a simplified probe. A real implementation would be more robust.
     # For now, we assume if it's an OpenAI-compatible endpoint, it supports tools.
     # A better probe would make a small test call with a dummy tool.
@@ -43,12 +47,17 @@ def make_llm() -> BaseChatModel:
 
     cfg = settings.llm
 
+    # Normalize base_url to ensure it ends with /v1
+    base_url = cfg.base_url.removesuffix("/")
+    if not base_url.endswith("/v1"):
+        base_url = f"{base_url}/v1"
+
     # Create a custom httpx client with tuned timeouts
     timeout = httpx.Timeout(cfg.connect_timeout, read=cfg.read_timeout)
     http_client = httpx.Client(timeout=timeout)
 
     return ChatOpenAI(
-        base_url=cfg.base_url,
+        base_url=base_url,
         api_key=cfg.api_key or "not-needed-for-local",
         model=cfg.model,
         temperature=cfg.temperature,

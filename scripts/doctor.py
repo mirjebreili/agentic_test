@@ -49,9 +49,10 @@ def run_diagnostics():
         try:
             # A minimal input that won't trigger tools
             dry_run_input = {"messages": [{"role": "user", "content": "DryRunEvent"}]}
+            thread = lg_client.threads.create(metadata={"source": "doctor_dry_run"})
             run = lg_client.runs.create(
-                assistants[0]["assistant_id"],
-                thread={"metadata": {"source": "doctor_dry_run"}},
+                assistant_id=assistants[0]["assistant_id"],
+                thread_id=thread["thread_id"],
                 input=dry_run_input,
             )
             print(f"   ✅ Graph dry-run successful. Run ID: {run['run_id']}")
@@ -71,8 +72,10 @@ def run_diagnostics():
     print(f"4. Checking OpenAI-compatible LLM at {cfg.base_url} ...")
     try:
         with httpx.Client() as client:
-            # Assumes base_url is the full path up to /v1
-            response = client.get(f"{cfg.base_url}/models")
+            base_url = cfg.base_url.removesuffix("/")
+            if not base_url.endswith("/v1"):
+                base_url = f"{base_url}/v1"
+            response = client.get(f"{base_url}/models")
             response.raise_for_status()
             models = response.json().get("data", [])
             if any(m['id'] == cfg.model for m in models):
@@ -136,6 +139,11 @@ def run_diagnostics():
 
     # 7. Recent Decisions Summary
     check_recent_decisions()
+
+    # 8. External Provider Checks
+    print("8. Checking External Providers...")
+    failures += check_data_provider()
+    failures += check_broker_provider()
 
     # Final result
     print("-" * 20)
@@ -225,6 +233,57 @@ def check_recent_decisions(max_runs: int = 10):
         print(f"     - Risk:     {risk_out}")
         print(f"     - Exec:     {exec_out}")
     print("   ---")
+
+def check_data_provider() -> int:
+    """Checks the active data provider."""
+    import asyncio
+    from app.settings import settings
+    from app.tools.standard import get_candles
+    from app.tools.data_models import FeatureSummary
+
+    failures = 0
+    provider = settings.data_provider
+    print(f"   - Data Provider: {provider}")
+
+    if provider == "mock":
+        try:
+            summary = asyncio.run(get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5", "count": 3}))
+            summary = FeatureSummary.model_validate_json(summary)
+            if len(summary.last_n_closes) == 3:
+                 print(f"   ✅ Mock provider returned a valid FeatureSummary.")
+            else:
+                print(f"   ❌ FAILED: Mock provider returned an invalid summary: {summary}")
+                failures += 1
+        except Exception as e:
+            print(f"   ❌ FAILED: Mock provider check failed: {type(e).__name__}: {e}")
+            failures += 1
+
+    # TODO: Add checks for real data providers here
+
+    return failures
+
+def check_broker_provider() -> int:
+    """Checks the active broker provider."""
+    from app.settings import settings
+    failures = 0
+    provider = settings.broker_provider
+    print(f"   - Broker Provider: {provider}")
+
+    if provider == "paper":
+        try:
+            # Check if the paper ledger path is writable
+            ledger_path = ROOT / settings.paper.get("ledger_path", "runs/paper_ledger.json")
+            ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            (ledger_path.parent / ".writable_test").touch()
+            (ledger_path.parent / ".writable_test").unlink()
+            print(f"   ✅ Paper broker ledger path is writable: {ledger_path}")
+        except OSError as e:
+            print(f"   ❌ FAILED: Paper broker ledger path is not writable: {e}")
+            failures += 1
+
+    # TODO: Add checks for real broker providers here
+
+    return failures
 
 if __name__ == "__main__":
     run_diagnostics()

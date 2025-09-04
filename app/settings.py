@@ -1,9 +1,9 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import Any, Literal, List
+from typing import Any, Literal, List, Optional
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # --- LLM Settings ---
 class LLMSettings(BaseModel):
+    provider: Optional[str] = None # For explicit labeling, e.g., LLM_PROVIDER=OLLAMA
+    provider_label: str = "OPENAI_COMPAT" # The final display name
     base_url: str
     model: str
     api_key: str | None = None
@@ -18,6 +20,16 @@ class LLMSettings(BaseModel):
     max_tokens: int = 1024
     require_tools: bool = True
     probe_tools: bool = True
+
+    @model_validator(mode='after')
+    def set_provider_label(self) -> 'LLMSettings':
+        if self.provider:
+            self.provider_label = self.provider.upper()
+        elif "ollama" in self.base_url or ":11434" in self.base_url:
+            self.provider_label = "OLLAMA"
+        else:
+            self.provider_label = "OPENAI_COMPAT"
+        return self
 
 # --- Telemetry Settings ---
 class LangSmithSettings(BaseModel):
@@ -101,6 +113,13 @@ def load_settings() -> Settings:
     # Resolve OANDA env
     env = data.get("oanda", {}).get("env", os.getenv("OANDA_ENV", "practice")).lower()
     data["oanda"]["env"] = env
+
+    # Manually load LLM_PROVIDER from env to support the label, overwriting if present
+    llm_provider = os.getenv("LLM_PROVIDER")
+    if llm_provider:
+        if "llm" not in data:
+            data["llm"] = {}
+        data["llm"]["provider"] = llm_provider
 
     s = Settings(**data)
 

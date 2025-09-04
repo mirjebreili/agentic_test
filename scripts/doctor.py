@@ -89,6 +89,7 @@ def run_diagnostics():
 
     # 5. Print settings summary
     print("5. Checking active configuration ...")
+    print(f"   - LLM Provider Label: {settings.llm.provider_label}")
     print(f"   - Mode: {settings.mode}")
     print(f"   - Broker Provider: {settings.broker_provider}")
     print(f"   - Data Provider: {settings.data_provider}")

@@ -38,6 +38,10 @@ This project uses a single OpenAI-compatible API to connect to your LLM. You can
     ```dotenv
     OPENAI_BASE_URL=http://localhost:11434/v1
     OPENAI_MODEL=llama3.1:8b-instruct
+
+    # Optional: For more precise logging, you can add this.
+    # If not set, the provider will be inferred from the URL.
+    LLM_PROVIDER=OLLAMA
     ```
 
 ### 2.2. Demo Mode

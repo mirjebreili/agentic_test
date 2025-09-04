@@ -130,8 +130,8 @@ def run_scheduler():
                             "timeframe": timeframe,
                             "mode": settings.mode,
                             "broker_provider": settings.broker_provider,
-                            "data_provider": settings.data_provider,
-                            "llm_provider": settings.llm.provider,
+                           "llm_provider": settings.llm.provider_label,
+                           "llm_model": settings.llm.model,
                             "run_reason": "scheduled",
                             "app_version": settings.app.get("version", "0.1.0"),
                         }

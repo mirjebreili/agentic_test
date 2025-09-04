@@ -22,7 +22,6 @@ async def test_get_candles_mock(monkeypatch):
     monkeypatch.setattr("app.tools.standard.settings.data.provider", "mock")
     monkeypatch.setattr("app.tools.data_mock.candles", mock_data_mock_candles)
     monkeypatch.setattr("app.tools.broker_paper.PaperBroker", MagicMock())
-    monkeypatch.setattr("pandas.read_parquet", MagicMock()) # Prevent FileNotFoundError
 
     result = await get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5"})
 

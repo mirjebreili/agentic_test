@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 
 class FeatureSummary(BaseModel):
@@ -8,5 +8,5 @@ class FeatureSummary(BaseModel):
     timeframe: str
     last_n_closes: List[float]
     indicators: Dict[str, float]
-    cache_path: str
+    cache_path: Optional[str] = None
     features_digest: str

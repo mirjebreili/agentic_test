@@ -129,6 +129,13 @@ def load_settings() -> Settings:
             data["llm"] = {}
         data["llm"]["provider"] = llm_provider
 
+    # Manually load DATA_CACHE_FORMAT from env, overwriting if present
+    cache_format = os.getenv("DATA_CACHE_FORMAT")
+    if cache_format:
+        if "data" not in data:
+            data["data"] = {}
+        data["data"]["cache_format"] = cache_format
+
     s = Settings(**data)
 
     return s

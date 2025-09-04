@@ -136,6 +136,7 @@ def run_diagnostics():
     print(f"   - Mode: {settings.mode}")
     print(f"   - Broker Provider: {settings.broker_provider}")
     print(f"   - Data Provider: {settings.data.provider}")
+    print(f"   - Data Cache Format: {settings.data.cache_format}")
 
     # 7. Recent Decisions Summary
     check_recent_decisions()
@@ -249,16 +250,19 @@ def check_data_provider() -> int:
 
     if provider == "mock":
         try:
-            summary_json = asyncio.run(get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5", "count": 3}))
-            summary = FeatureSummary.model_validate_json(summary_json)
-            if len(summary.last_n_closes) == 3:
-                 print(f"   ✅ Mock provider returned a valid FeatureSummary.")
-            else:
-                print(f"   ❌ FAILED: Mock provider returned an invalid summary: {summary}")
+            result_json_str = asyncio.run(get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5", "count": 3}))
+            result_data = json.loads(result_json_str)
+
+            if "error" in result_data:
+                print(f"   ❌ FAILED: Mock provider returned an error: {result_data['error']}")
                 failures += 1
-        except ProviderError as e:
-            print(f"   ❌ FAILED: Mock provider check failed: {e}")
-            failures += 1
+            else:
+                summary = FeatureSummary.model_validate(result_data)
+                if len(summary.last_n_closes) == 3:
+                    print(f"   ✅ Mock provider returned a valid FeatureSummary.")
+                else:
+                    print(f"   ❌ FAILED: Mock provider returned an invalid summary: {summary}")
+                    failures += 1
         except Exception as e:
             print(f"   ❌ FAILED: Mock provider check failed unexpectedly: {type(e).__name__}: {e}")
             failures += 1

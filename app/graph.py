@@ -37,16 +37,16 @@ def create_traced_node(node_name: str, prompt_id: str, agent_runnable):
 
                 log_payload = {"event_type": "node_exit", "node": node_name, "output": result, "latency_ms": latency_ms, "status": "ok", "attempt": attempt + 1}
 
-                # For strategy node, extract audit fields from the output
-                if node_name == "strategy" and result.get("messages"):
-                    try:
-                        content = result["messages"][-1].content
-                        if isinstance(content, str):
-                            data = json.loads(content)
-                            log_payload["features_digest"] = data.get("features_digest")
-                            log_payload["cache_path"] = data.get("cache_path")
-                    except (json.JSONDecodeError, IndexError):
-                        pass # Ignore if parsing fails
+                # If a tool was called, inspect the result for the FeatureSummary
+                if result.get("messages"):
+                    for message in result.get("messages"):
+                        if isinstance(message, ToolMessage) and message.name == "get_candles":
+                            try:
+                                summary_data = json.loads(message.content)
+                                log_payload["features_digest"] = summary_data.get("features_digest")
+                                log_payload["cache_path"] = summary_data.get("cache_path")
+                            except (json.JSONDecodeError, IndexError):
+                                pass # Ignore if parsing fails
 
                 tracer.log(log_payload)
                 return result

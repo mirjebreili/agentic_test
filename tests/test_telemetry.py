@@ -59,9 +59,9 @@ def test_tracer_redaction(tracer, tmp_path):
         tracer.log(event)
 
         # Find the call to the jsonl file write
-        # This is complex, let's test the _redact method directly
+        # This is complex, let's test the _sanitize_for_json method directly
 
-    sanitized = tracer._redact(event)
+    sanitized = tracer._sanitize_for_json(event)
     assert sanitized["input"]["api_key"] == "***REDACTED***"
     assert sanitized["input"]["secret"] == "***REDACTED***"
     assert sanitized["input"]["user"] == "testuser"

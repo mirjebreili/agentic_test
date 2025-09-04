@@ -7,13 +7,10 @@ def test_position_units_basic():
     """Test basic position unit calculation."""
     units = position_units(equity=100_000, risk_pct=0.01, atr=0.0050)
     assert isinstance(units, int)
-    # 100_000 * 0.01 / (0.0050 * 10000 * 0.0001) = 1000 / 0.005 = 200_000
-    # The formula seems to have an issue in the original prompt, but let's test the implementation.
-    # The implementation is: risk_amount / (atr * atr_pips * pip_value_per_unit)
-    # 1000 / (0.0050 * 10000 * 0.0001) = 1000 / 5 = 200
-    # Let's re-calculate: (0.0050 * 10000.0 * 0.0001) = 5.0
-    # risk_amount = 100000 * 0.01 = 1000
-    # units = 1000 / 0.005 = 200000
+    # Calculation:
+    # risk_amount = 100_000 * 0.01 = 1000
+    # denom = atr * atr_pips * pip_value_per_unit = 0.0050 * 10000.0 * 0.0001 = 0.005
+    # units = risk_amount / denom = 1000 / 0.005 = 200_000
     assert units == 200000
 
 def test_position_units_zero_atr():

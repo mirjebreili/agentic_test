@@ -1,129 +1,78 @@
 # Multiagent Trader (LangGraph Edition)
 
-This project implements a multi-agent FX trading system using the LangGraph framework. It is designed to be run with the LangGraph CLI, providing a powerful development and monitoring experience via the LangGraph Studio. The default configuration runs in a fully offline demo mode.
+This project implements a multi-agent FX trading system using the LangGraph framework. It is designed to be run with the LangGraph CLI, providing a powerful development and monitoring experience via the LangGraph Studio.
 
-## 1. Prerequisites
+## Key Architectural Features
+- **Unified LLM Interface**: Uses a single OpenAI-compatible client to connect to various LLM backends like VLLM or Ollama.
+- **Professional Prompt Management**: All agent prompts are externalized into versioned Markdown files under `app/prompts/`, making them easy to manage, test, and override.
+- **Local-First Scheduling**: Uses a simple, robust Python script to trigger graph runs, avoiding dependencies on platform-specific features for local development.
+- **Comprehensive Tracing**: Includes a built-in telemetry system that logs detailed traces to local CSV/JSONL files and optionally to LangSmith for cloud-based observability.
 
-- Python 3.11+
-- Git
-
-## 2. Installation
-
+## 1. Installation
 ```bash
 # 1. Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate
 
-# 2. Install the project package in editable mode
+# 2. Install dependencies
 pip install -e .
-
-# 3. Install the LangGraph CLI and SDK
 pip install -U "langgraph-cli[inmem]" langgraph-sdk
 ```
 
-## 3. Choose your LLM Provider
+## 2. Configuration
 
-This project supports both OpenAI-compatible endpoints (like VLLM) and Ollama.
+### 2.1. LLM Backend (vLLM or Ollama)
+This project uses a single OpenAI-compatible API to connect to your LLM. You can use either a VLLM server or an Ollama server.
 
-### A) VLLM (OpenAI-compatible)
+1.  **Create `.env` file:** `cp .env.example .env`
+2.  **Edit `.env`:** Configure the `OPENAI_*` variables to point to your chosen backend.
 
-1.  **Requirements**: A running vLLM server or other OpenAI-compatible API endpoint.
-2.  **Configuration**: In your `.env` file, set:
+    **For VLLM:**
     ```dotenv
-    LLM_PROVIDER=VLLM
     OPENAI_BASE_URL=http://localhost:8000/v1
-    OPENAI_MODEL=Your-Model-Name
+    OPENAI_MODEL=Your-vLLM-Model-Name
     ```
 
-### B) Ollama (Native API)
-
-1.  **Requirements**: Install [Ollama](https://ollama.com/) and ensure the daemon is running.
-2.  **Pull a model**: You need a model that supports tool calling. We recommend:
-    ```bash
-    ollama pull qwen2.5:7b-instruct
-    # or
-    ollama pull llama3.1:8b-instruct
-    ```
-3.  **Configuration**: In your `.env` file, set:
+    **For Ollama:**
+    First, ensure you have a tool-calling capable model (e.g., `ollama pull llama3.1:8b-instruct`). Then, set:
     ```dotenv
-    LLM_PROVIDER=OLLAMA
-    OLLAMA_BASE_URL=http://localhost:11434
-    OLLAMA_MODEL=qwen2.5:7b-instruct
+    OPENAI_BASE_URL=http://localhost:11434/v1
+    OPENAI_MODEL=llama3.1:8b-instruct
     ```
 
-## 4. Running the Application (Local Development)
+### 2.2. Demo Mode
+The default `config/settings.yaml` is configured to run in a fully offline demo mode (`broker_provider: paper`, `data_provider: mock`). No API keys are needed to get started.
 
-The local workflow uses two terminals: one for the LangGraph server and one for a simple Python script that triggers the trading logic on a schedule.
+## 3. Running the Application
+
+The local workflow uses two terminals: one for the LangGraph server and one for the scheduler script.
 
 ### Terminal 1: Start the LangGraph Server
-
-From the repository root, start the development server:
-
 ```bash
 langgraph dev
 ```
+Keep this server running. It serves the graph and the LangGraph Studio UI.
 
-The server will start, load the `trader` graph, and print the URL for the LangGraph Studio UI (e.g., `http://127.0.0.1:2024`). Keep this server running.
-
-### Terminal 2: Start the Scheduler Trigger
-
-Once the server is running, open a second terminal to start the scheduler script.
-
+### Terminal 2: Start the Scheduler
 ```bash
-# 1. Activate the virtual environment
+# Activate the virtual environment
 source .venv/bin/activate
 
-# 2. (Optional) Set the LG_URL if your server started on a different port
-# export LG_URL="http://127.0.0.1:8001"
-
-# 3. Run the scheduler trigger
+# Run the scheduler trigger
 python scripts/scheduler_trigger.py
 ```
+This script will connect to the server and begin triggering trading decisions every 60 seconds.
 
-The script will connect to the server and begin triggering a run for each configured instrument every 60 seconds.
+## 4. Prompts
+All agent prompts are located in `app/prompts/`. They are versioned `.md` files with a YAML front-matter header.
 
-#### Running in the Background (Optional)
-To keep the scheduler running after you close the terminal, you can use a tool like `tmux` or `screen` on macOS/Linux, or run it as a background task in Windows Task Scheduler.
+-   **Structure**: `app/prompts/<agent_name>/<prompt_name>__v<version>.md`
+-   **Overrides**: You can override any prompt for a specific environment by creating a file with the same ID in `app/prompts_overrides/<env>/`.
+-   **Changelog**: A summary of significant prompt changes can be found in `app/prompts/CHANGELOG.md`.
 
-## 5. LangGraph Platform Deployment (Cron Jobs)
+## 5. Monitoring & Diagnostics
+-   **LangGraph Studio**: View traces and debug runs via the URL provided by `langgraph dev`.
+-   **Local Traces**: By default, detailed logs are written to `runs/traces/`.
+-   **Doctor Script**: Run `python scripts/doctor.py` to check your configuration and connectivity.
 
-The LangGraph cron job feature is designed for production deployments on LangGraph Platform (Plus tier). It is **not available** on the local `langgraph dev` server.
-
-For future platform deployments, you can use the `scripts/create_crons_platform_only.py` script to register cron jobs. This script will fail gracefully if run against a local dev server.
-
-## 6. Monitoring and Diagnostics
-
--   **LangGraph Studio**: Open the Studio URL from the `langgraph dev` output to see all triggered runs and inspect their traces.
--   **Paper Ledger**: The paper broker writes all simulated trades to `runs/paper_ledger.json`.
--   **Doctor Script**: Run the diagnostic `doctor.py` script to check for common issues:
-    ```bash
-    python scripts/doctor.py
-    ```
-
-### Stale Threads after Server Restart
-The `langgraph dev` server stores all data (including threads) in memory. If you restart the server, all existing threads become invalid. The `scheduler_trigger.py` script is designed to handle this automatically by verifying threads before use and recreating them if they are stale. You should not need to do anything manually, but be aware that you will see messages about threads being recreated after a server restart.
-
-## 7. Tracing & Observability
-
-The application includes a telemetry system that can log traces to local files and/or to LangSmith.
-
-### Local Logs (Default)
-
-By default, detailed traces are written to local files in the `runs/traces/` directory.
--   **Provider:** `telemetry.tracing_provider` in `config/settings.yaml` is set to `local_both`.
--   **Files:**
-    -   `YYYY-MM-DD_actions.csv`: A summary of all events, useful for quick analysis.
-    -   `YYYY-MM-DD_actions.jsonl`: Full, sanitized payloads for each event, useful for deep debugging.
--   **Rotation:** Files are rotated daily.
-
-### LangSmith (Cloud Tracing)
-
-To enable cloud-based tracing with LangSmith:
-1.  Set `telemetry.tracing_provider` to `langsmith` in `config/settings.yaml`.
-2.  Set the following environment variables in your `.env` file:
-    ```dotenv
-    LANGSMITH_TRACING=true
-    LANGSMITH_API_KEY=<your_api_key>
-    LANGSMITH_PROJECT=agentic-trader # or your preferred project name
-    ```
-3.  Start the application as usual. Traces will now appear in your LangSmith project.
+For more details on tracing and troubleshooting, see the other sections of this README.

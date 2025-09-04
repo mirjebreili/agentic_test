@@ -1,20 +1,15 @@
 app:
   name: multiagent-trader
+  version: "0.2.0" # Bump version for new architecture
 
 llm:
-  provider: ${LLM_PROVIDER}
-  vllm:
-    base_url: ${OPENAI_BASE_URL}
-    model: ${OPENAI_MODEL}
-    api_key: ${OPENAI_API_KEY}
-    temperature: 0.2
-    max_tokens: 1024
-  ollama:
-    base_url: ${OLLAMA_BASE_URL}
-    model: ${OLLAMA_MODEL}
-    temperature: 0.2
-    mirostat: 0
-    num_predict: 1024
+  base_url: ${OPENAI_BASE_URL}
+  model: ${OPENAI_MODEL}
+  api_key: ${OPENAI_API_KEY}
+  temperature: 0.2
+  max_tokens: 1024
+  require_tools: true
+  probe_tools: true
 
 mode: ${MODE}
 

@@ -42,38 +42,29 @@ def run_diagnostics():
             print(f"   ❌ FAILED: Could not find default assistant: {e}")
             failures += 1
 
-    # 3. Check LLM connectivity
+    # 3. Check LLM connectivity and capabilities
     from app.settings import settings
-    provider = settings.llm.provider.lower()
-    print(f"3. Checking LLM Provider '{provider}' ...")
-    if provider == "vllm":
-        cfg = settings.llm.vllm
-        print(f"   - Checking VLLM at {cfg.base_url} ...")
-        try:
-            with httpx.Client() as client:
-                response = client.get(f"{cfg.base_url.replace('/v1', '')}/v1/models")
-                response.raise_for_status()
-            print("     ✅ VLLM endpoint is reachable.")
-        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
-            print(f"     ❌ FAILED: Could not connect to VLLM: {e}")
-            failures += 1
-    elif provider == "ollama":
-        cfg = settings.llm.ollama
-        print(f"   - Checking Ollama at {cfg.base_url} for model {cfg.model} ...")
-        try:
-            with httpx.Client() as client:
-                response = client.get(f"{cfg.base_url}/api/tags")
-                response.raise_for_status()
-                models = response.json().get("models", [])
-                if not any(m['name'] == cfg.model for m in models):
-                    print(f"     ❌ FAILED: Ollama model '{cfg.model}' not found.")
-                    print(f"        (Hint: Run `ollama pull {cfg.model}`)")
-                    failures += 1
-                else:
-                    print(f"     ✅ Ollama is reachable and model '{cfg.model}' is available.")
-        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
-            print(f"     ❌ FAILED: Could not connect to Ollama: {e}")
-            failures += 1
+    from app.llm import probe_tool_calling_capability
+
+    cfg = settings.llm
+    print(f"3. Checking OpenAI-compatible LLM at {cfg.base_url} ...")
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{cfg.base_url.replace('/v1', '')}/v1/models")
+            response.raise_for_status()
+            models = response.json().get("data", [])
+            if any(m['id'] == cfg.model for m in models):
+                print(f"   ✅ LLM is reachable and model '{cfg.model}' is available.")
+            else:
+                print(f"   ❌ FAILED: LLM is reachable, but model '{cfg.model}' is not found.")
+                failures += 1
+    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+        print(f"   ❌ FAILED: Could not connect to LLM endpoint: {e}")
+        failures += 1
+
+    if failures == 0 and cfg.probe_tools:
+        supports_tools = probe_tool_calling_capability()
+        print(f"   - Tool Calling Probe: {'Supported ✅' if supports_tools else 'Not Supported ⚠️ (fallback may be active)'}")
 
     # 4. Check Tracing Configuration
     print("4. Checking Tracing/Telemetry configuration ...")

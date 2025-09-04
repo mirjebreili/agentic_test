@@ -10,24 +10,14 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parents[1]
 
 # --- LLM Settings ---
-class VLLMSettings(BaseModel):
+class LLMSettings(BaseModel):
     base_url: str
     model: str
     api_key: str | None = None
     temperature: float = 0.2
     max_tokens: int = 1024
-
-class OllamaSettings(BaseModel):
-    base_url: str
-    model: str
-    temperature: float = 0.2
-    mirostat: int = 0
-    num_predict: int = 1024
-
-class LLMSettings(BaseModel):
-    provider: str
-    vllm: VLLMSettings
-    ollama: OllamaSettings
+    require_tools: bool = True
+    probe_tools: bool = True
 
 # --- Telemetry Settings ---
 class LangSmithSettings(BaseModel):

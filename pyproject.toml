@@ -21,6 +21,14 @@ dependencies = [
   "backtrader>=1.9.78.123",
   "uvloop>=0.19; platform_system != 'Windows'",
   "langchain-community>=0.2.0",
+  "Jinja2>=3.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "pytest-asyncio>=0.23",
 ]
 
 [tool.setuptools.packages.find]

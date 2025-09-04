@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List
 
+from langchain_core.messages import BaseMessage
+from langchain_core.messages import messages_to_dict
+
 from app.settings import settings
 
 class Tracer:
@@ -50,22 +53,26 @@ class Tracer:
 
         return csv_path, jsonl_path
 
-    def _redact(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Redact sensitive keys from a dictionary."""
-        if not isinstance(data, dict):
+    def _sanitize_for_json(self, data: Any) -> Any:
+        """
+        Recursively traverses data to redact sensitive keys and convert
+        non-serializable objects (like LangChain messages) to dicts.
+        """
+        if isinstance(data, dict):
+            sanitized_dict = {}
+            for key, value in data.items():
+                if key in self.redact_keys:
+                    sanitized_dict[key] = "***REDACTED***"
+                else:
+                    sanitized_dict[key] = self._sanitize_for_json(value)
+            return sanitized_dict
+        elif isinstance(data, list):
+            return [self._sanitize_for_json(item) for item in data]
+        elif isinstance(data, BaseMessage):
+            # For a single message object, convert it to a dict
+            return messages_to_dict([data])[0]
+        else:
             return data
-
-        redacted_data = {}
-        for key, value in data.items():
-            if key in self.redact_keys:
-                redacted_data[key] = "***REDACTED***"
-            elif isinstance(value, dict):
-                redacted_data[key] = self._redact(value)
-            elif isinstance(value, list):
-                redacted_data[key] = [self._redact(item) for item in value]
-            else:
-                redacted_data[key] = value
-        return redacted_data
 
     def log(self, event: Dict[str, Any]):
         if self.provider == "none":
@@ -77,11 +84,12 @@ class Tracer:
         event.setdefault("ts_iso", datetime.now(timezone.utc).isoformat())
 
         # Sanitize and prepare data for logging
-        sanitized_event = self._redact(event)
+        sanitized_event = self._sanitize_for_json(event)
 
         if jsonl_path:
             with open(jsonl_path, "a") as f:
-                f.write(json.dumps(sanitized_event) + "\n")
+                # We need a custom default handler for any types we missed
+                f.write(json.dumps(sanitized_event, default=str) + "\n")
 
         if csv_path:
             # Create a digest for CSV

@@ -15,9 +15,12 @@ mode: ${MODE}
 
 # switch providers for demo
 broker_provider: "paper"
-data_provider: "mock"
 news_provider: null
 macro_provider: "trading_economics"
+
+data:
+  provider: "mock"
+  cache_format: "csv"
 
 instruments: ["EUR_USD", "GBP_USD"]
 timeframes: ["M5", "H1", "D"]

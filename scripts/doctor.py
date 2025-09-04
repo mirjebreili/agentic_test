@@ -135,13 +135,14 @@ def run_diagnostics():
     print(f"   - LLM Provider Label: {settings.llm.provider_label}")
     print(f"   - Mode: {settings.mode}")
     print(f"   - Broker Provider: {settings.broker_provider}")
-    print(f"   - Data Provider: {settings.data_provider}")
+    print(f"   - Data Provider: {settings.data.provider}")
 
     # 7. Recent Decisions Summary
     check_recent_decisions()
 
     # 8. External Provider Checks
     print("8. Checking External Providers...")
+    failures += check_parquet_engine()
     failures += check_data_provider()
     failures += check_broker_provider()
 
@@ -240,22 +241,26 @@ def check_data_provider() -> int:
     from app.settings import settings
     from app.tools.standard import get_candles
     from app.tools.data_models import FeatureSummary
+    from app.tools.errors import ProviderError
 
     failures = 0
-    provider = settings.data_provider
+    provider = settings.data.provider
     print(f"   - Data Provider: {provider}")
 
     if provider == "mock":
         try:
-            summary = asyncio.run(get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5", "count": 3}))
-            summary = FeatureSummary.model_validate_json(summary)
+            summary_json = asyncio.run(get_candles.ainvoke({"instrument": "EUR_USD", "timeframe": "M5", "count": 3}))
+            summary = FeatureSummary.model_validate_json(summary_json)
             if len(summary.last_n_closes) == 3:
                  print(f"   ✅ Mock provider returned a valid FeatureSummary.")
             else:
                 print(f"   ❌ FAILED: Mock provider returned an invalid summary: {summary}")
                 failures += 1
+        except ProviderError as e:
+            print(f"   ❌ FAILED: Mock provider check failed: {e}")
+            failures += 1
         except Exception as e:
-            print(f"   ❌ FAILED: Mock provider check failed: {type(e).__name__}: {e}")
+            print(f"   ❌ FAILED: Mock provider check failed unexpectedly: {type(e).__name__}: {e}")
             failures += 1
 
     # TODO: Add checks for real data providers here
@@ -281,9 +286,47 @@ def check_broker_provider() -> int:
             print(f"   ❌ FAILED: Paper broker ledger path is not writable: {e}")
             failures += 1
 
-    # TODO: Add checks for real broker providers here
+    elif provider == "oanda":
+        if not settings.oanda.api_key or not settings.oanda.account_id:
+            print("   ⚪️ OANDA provider is selected, but API key or account ID is missing.")
+            return failures
+
+        try:
+            headers = {"Authorization": f"Bearer {settings.oanda.api_key}"}
+            url = f"{settings.oanda.base}/v3/accounts/{settings.oanda.account_id}/summary"
+            with httpx.Client(timeout=10) as client:
+                r = client.get(url, headers=headers)
+                r.raise_for_status()
+                acc_summary = r.json().get("account", {})
+                print(f"   ✅ OANDA connection successful. Account: {acc_summary.get('alias', 'N/A')}, Currency: {acc_summary.get('currency')}")
+        except httpx.HTTPStatusError as e:
+            print(f"   ❌ FAILED: OANDA API request failed: {e.response.status_code} {e.response.text}")
+            failures += 1
+        except Exception as e:
+            print(f"   ❌ FAILED: OANDA connection failed: {type(e).__name__}: {e}")
+            failures += 1
 
     return failures
+
+def check_parquet_engine() -> int:
+    """Checks for a valid Parquet engine if format is 'parquet'."""
+    from app.settings import settings
+    if settings.data.cache_format == "parquet":
+        try:
+            import pyarrow
+            print("   ✅ Parquet engine 'pyarrow' is available.")
+            return 0
+        except ImportError:
+            pass
+        try:
+            import fastparquet
+            print("   ✅ Parquet engine 'fastparquet' is available.")
+            return 0
+        except ImportError:
+            print("   ❌ FAILED: `data.cache_format` is 'parquet' but no engine found.")
+            print("             Please `pip install pyarrow` (recommended) or `fastparquet`.")
+            return 1
+    return 0
 
 if __name__ == "__main__":
     run_diagnostics()

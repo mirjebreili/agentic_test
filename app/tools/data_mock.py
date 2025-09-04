@@ -20,6 +20,7 @@ import pandas as pd
 
 from app.settings import settings
 from app.tools.data_models import FeatureSummary
+from app.tools.errors import ProviderError
 from app.tools.ta_tool import compute_indicators
 
 
@@ -98,8 +99,19 @@ def candles(instrument: str, granularity: str, count: int = 500) -> FeatureSumma
     cache_dir = Path(settings.persistence.get("path", "runs/")) / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     timestamp = pd.Timestamp.utcnow().strftime("%Y%m%d_%H%M%S")
-    cache_path = cache_dir / f"{instrument}_{granularity}_{timestamp}.parquet"
-    df.to_parquet(cache_path)
+
+    cache_format = settings.data.cache_format
+    cache_path = None
+    if cache_format != "none":
+        if cache_format == "parquet":
+            cache_path = cache_dir / f"{instrument}_{granularity}_{timestamp}.parquet"
+            try:
+                df.to_parquet(cache_path)
+            except ImportError:
+                raise ProviderError("Parquet engine not found. Please install pyarrow or fastparquet.")
+        elif cache_format == "csv":
+            cache_path = cache_dir / f"{instrument}_{granularity}_{timestamp}.csv.gz"
+            df.to_csv(cache_path, compression="gzip")
 
     # Create summary
     last_3_closes = df["close"].tail(3).tolist()

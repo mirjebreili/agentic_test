@@ -48,6 +48,11 @@ class TelemetrySettings(BaseModel):
     local: LocalTraceSettings
     redact_keys: List[str] = ["api_key", "token", "password", "Authorization"]
 
+# --- Data Settings ---
+class DataSettings(BaseModel):
+    provider: str
+    cache_format: Literal["parquet", "csv", "none"] = "csv"
+
 # --- Other Settings ---
 class RiskSettings(BaseModel):
     max_risk_per_trade: float
@@ -82,7 +87,7 @@ class Settings(BaseModel):
     llm: LLMSettings
     telemetry: TelemetrySettings
     mode: str
-    data_provider: str
+    data: DataSettings
     broker_provider: str
     news_provider: str | None
     macro_provider: str | None

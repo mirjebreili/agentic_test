@@ -4,6 +4,7 @@ import json
 
 from app.tools.standard import get_candles, execute_order, propose_order, attach_stops
 from app.tools.data_models import FeatureSummary
+from app.tools.errors import ProviderError
 
 @pytest.mark.asyncio
 async def test_get_candles_mock(monkeypatch):
@@ -18,7 +19,7 @@ async def test_get_candles_mock(monkeypatch):
     )
 
     mock_data_mock_candles = MagicMock(return_value=mock_summary)
-    monkeypatch.setattr("app.tools.standard.settings.data_provider", "mock")
+    monkeypatch.setattr("app.tools.standard.settings.data.provider", "mock")
     monkeypatch.setattr("app.tools.data_mock.candles", mock_data_mock_candles)
     monkeypatch.setattr("app.tools.broker_paper.PaperBroker", MagicMock())
     monkeypatch.setattr("pandas.read_parquet", MagicMock()) # Prevent FileNotFoundError

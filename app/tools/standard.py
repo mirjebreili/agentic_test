@@ -17,7 +17,7 @@ async def get_candles(instrument: str, timeframe: str, count: int = 200) -> str:
     technical indicators, and a digest of the features.
     """
     try:
-        if settings.data_provider == "mock":
+        if settings.data.provider == "mock":
             from app.tools import data_mock; summary = data_mock.candles(instrument, timeframe, count=count)
         else:
             from app.tools import data_oanda; summary = await data_oanda.candles(instrument, timeframe, count=count)

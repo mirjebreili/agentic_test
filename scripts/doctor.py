@@ -71,7 +71,8 @@ def run_diagnostics():
     print(f"4. Checking OpenAI-compatible LLM at {cfg.base_url} ...")
     try:
         with httpx.Client() as client:
-            response = client.get(f"{cfg.base_url.replace('/v1', '')}/v1/models")
+            # Assumes base_url is the full path up to /v1
+            response = client.get(f"{cfg.base_url}/models")
             response.raise_for_status()
             models = response.json().get("data", [])
             if any(m['id'] == cfg.model for m in models):
@@ -183,6 +184,10 @@ def check_recent_decisions(max_runs: int = 10):
             node_name = log.get("node")
             if not node_name: continue
 
+            if node_name == "strategy" and log.get("event_type") == "node_enter":
+                runs[run_id]["prompt_id"] = log.get("prompt_id")
+                runs[run_id]["prompt_version"] = log.get("prompt_version")
+
             if log.get("event_type") == "node_exit":
                 if log.get("status") == "error":
                     runs[run_id]["nodes"][node_name] = f"ERROR: {log.get('error_type')}"
@@ -208,7 +213,8 @@ def check_recent_decisions(max_runs: int = 10):
 
     print("   ---")
     for key, run in sorted(latest_runs.items())[:max_runs]:
-        print(f"   - Decision: {key} (Run: {run['run_id'][:8]} at {run.get('ts')})")
+        prompt_info = f"(prompt: {run.get('prompt_id')} v{run.get('prompt_version')})"
+        print(f"   - Decision: {key} (Run: {run['run_id'][:8]} at {run.get('ts')}) {prompt_info}")
         strategy_out = run["nodes"].get("strategy", "N/A")
         signal_out = run["nodes"].get("signal", "N/A")
         risk_out = run["nodes"].get("risk", "N/A")

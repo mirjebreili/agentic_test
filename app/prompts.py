@@ -11,7 +11,6 @@ OVERRIDES_DIR = ROOT / "app" / "prompts_overrides"
 class Prompt:
     def __init__(self, filepath: Path):
         self.filepath = filepath
-        self.id = f"{filepath.parent.name}/{filepath.stem}"
 
         content = filepath.read_text()
         parts = content.split("---", 2)
@@ -21,6 +20,14 @@ class Prompt:
         else:
             self.meta = {}
             self.body = content
+
+        self.id = self.meta.get("id")
+
+        # Validate required metadata
+        required_keys = {"id", "version", "role", "description", "inputs", "output_format", "tools_required"}
+        if not required_keys.issubset(self.meta.keys()):
+            missing = required_keys - set(self.meta.keys())
+            raise ValueError(f"Prompt {self.filepath} is missing required metadata: {missing}")
 
         self.template = Template(self.body)
 
@@ -41,7 +48,7 @@ class PromptRegistry:
     def _load_prompts(self):
         # Load base prompts
         for filepath in self.base_dir.rglob("*.md"):
-            if filepath.is_file():
+            if filepath.is_file() and "__v" in filepath.name:
                 prompt = Prompt(filepath)
                 self._prompts[prompt.id] = prompt
 

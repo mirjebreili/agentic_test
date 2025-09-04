@@ -12,29 +12,41 @@ def mock_prompts(tmp_path: Path):
 
     # Create strategy prompt
     (base_dir / "strategy").mkdir(parents=True)
-    (base_dir / "strategy" / "decide__v1.md").write_text(
-        "---\n"
-        "id: decide__v1\n"
+    prompt_meta = (
+        "id: strategy/decide__v1\n"
+        "version: 1.0\n"
+        "role: user\n"
+        "description: A test prompt\n"
         "inputs: [instrument]\n"
-        "---\n"
-        "Analyze {{ instrument }}."
+        "output_format: text\n"
+        "tools_required: false\n"
+    )
+    (base_dir / "strategy" / "decide__v1.md").write_text(
+        f"---\n{prompt_meta}---\nAnalyze {{ instrument }}."
     )
 
     # Create override for dev environment
     (override_dir / "dev" / "strategy").mkdir(parents=True)
     (override_dir / "dev" / "strategy" / "decide__v1.md").write_text(
-        "---\n"
-        "id: decide__v1\n"
-        "inputs: [instrument]\n"
-        "---\n"
-        "OVERRIDDEN: Analyze {{ instrument }}."
+        f"---\n{prompt_meta}---\nOVERRIDDEN: Analyze {{ instrument }}."
     )
 
     return base_dir, override_dir
 
 def test_prompt_loading_and_rendering():
     """Test that a prompt is loaded and rendered correctly."""
-    prompt_content = "---\ninputs: [name]\n---\nHello, {{ name }}!"
+    prompt_content = (
+        "---\n"
+        "id: test_prompt\n"
+        "version: 1.0\n"
+        "role: user\n"
+        "description: A test prompt\n"
+        "inputs: [name]\n"
+        "output_format: text\n"
+        "tools_required: false\n"
+        "---\n"
+        "Hello, {{ name }}!"
+    )
     prompt = Prompt(MagicMock(read_text=lambda: prompt_content, parent=MagicMock(name="test"), stem="test_prompt"))
     rendered = prompt.render(name="World")
     assert "Hello, World!" in rendered

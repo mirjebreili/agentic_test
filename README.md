@@ -29,13 +29,15 @@ This project uses a single OpenAI-compatible API to connect to your LLM. You can
 
     **For VLLM:**
     ```dotenv
+    # The full URL to the OpenAI-compatible endpoint, including /v1
     OPENAI_BASE_URL=http://localhost:8000/v1
     OPENAI_MODEL=Your-vLLM-Model-Name
     ```
 
     **For Ollama:**
-    First, ensure you have a tool-calling capable model (e.g., `ollama pull llama3.1:8b-instruct`). Then, set:
+    Recommended models with tool-calling support include `llama3.1:8b-instruct` and `qwen2:7b-instruct`.
     ```dotenv
+    # The full URL to the OpenAI-compatible endpoint, including /v1
     OPENAI_BASE_URL=http://localhost:11434/v1
     OPENAI_MODEL=llama3.1:8b-instruct
 
@@ -47,7 +49,10 @@ This project uses a single OpenAI-compatible API to connect to your LLM. You can
 ### 2.2. Demo Mode
 The default `config/settings.yaml` is configured to run in a fully offline demo mode (`broker_provider: paper`, `data_provider: mock`). No API keys are needed to get started.
 
-## 3. Running the Application
+## 3. Known Development Issues
+- **Local LLM Saturation**: Running multiple trading decisions concurrently can sometimes overload local LLM servers (Ollama/vLLM), leading to connection errors. The scheduler includes a `stagger_seconds` setting (default: 2s) to mitigate this. If you still encounter issues, consider increasing this value in `config/settings.yaml`.
+
+## 4. Running the Application
 
 The local workflow uses two terminals: one for the LangGraph server and one for the scheduler script.
 
@@ -67,14 +72,14 @@ python scripts/scheduler_trigger.py
 ```
 This script will connect to the server and begin triggering trading decisions every 60 seconds.
 
-## 4. Prompts
+## 5. Prompts
 All agent prompts are located in `app/prompts/`. They are versioned `.md` files with a YAML front-matter header.
 
 -   **Structure**: `app/prompts/<agent_name>/<prompt_name>__v<version>.md`
 -   **Overrides**: You can override any prompt for a specific environment by creating a file with the same ID in `app/prompts_overrides/<env>/`.
 -   **Changelog**: A summary of significant prompt changes can be found in `app/prompts/CHANGELOG.md`.
 
-## 5. Monitoring & Diagnostics
+## 6. Monitoring & Diagnostics
 -   **LangGraph Studio**: View traces and debug runs via the URL provided by `langgraph dev`.
 -   **Local Traces**: By default, detailed logs are written to `runs/traces/`.
 -   **Doctor Script**: Run `python scripts/doctor.py` to check your configuration and connectivity.
